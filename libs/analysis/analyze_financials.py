@@ -1,92 +1,28 @@
 import os
 import sqlite3
 import datetime
-import random
 import time
-import numpy as np
 import pandas as pd
-import yfinance as yf
+import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from jinja2 import Template
+from libs.utility import stock_utils
 
-CACHE_DB_PATH = "data/cache/defence_cache.db"
+CACHE_DB_PATH = "data/cache/financials_cache.db"
 SELECTED_DB_PATH = "output/db/SelectedStock.db"
-HTML_REPORT_PATH = "output/htmls/Defence.html"
+HTML_REPORT_PATH = "output/htmls/Financials.html"
 
 # Ensure directories exist
 os.makedirs("data/cache", exist_ok=True)
 os.makedirs("output/db", exist_ok=True)
 os.makedirs("output/htmls", exist_ok=True)
 
-# List of 18 Indian Defence Tickers with their sub-sectors
-DEFENCE_CONSTITUENTS = {
-    "HAL.NS": "Aerospace & Defence",
-    "BEL.NS": "Aerospace & Defence",
-    "SOLARINDS.NS": "Industrial Manufacturing",
-    "MAZDOCK.NS": "Shipbuilding",
-    "BHARATFORG.NS": "Industrial Manufacturing",
-    "BDL.NS": "Aerospace & Defence",
-    "COCHINSHIP.NS": "Shipbuilding",
-    "GRSE.NS": "Shipbuilding",
-    "DATAPATNS.NS": "Aerospace & Defence",
-    "ASTRAMICRO.NS": "Aerospace & Defence",
-    "MTARTECH.NS": "Aerospace & Defence",
-    "MIDHANI.NS": "Aerospace & Defence",
-    "ZENTEC.NS": "Aerospace & Defence",
-    "DYNAMATECH.NS": "Aerospace & Defence",
-    "PARAS.NS": "Aerospace & Defence",
-    "IDEAFORGE.NS": "Aerospace & Defence",
-    "BEML.NS": "Industrial Manufacturing",
-    "DCXINDIA.NS": "Aerospace & Defence"
-}
-
 def init_databases():
-    # Cache DB
-    conn_cache = sqlite3.connect(CACHE_DB_PATH)
-    cursor_cache = conn_cache.cursor()
-    cursor_cache.execute("""
-        CREATE TABLE IF NOT EXISTS price_history (
-            ticker TEXT,
-            date TEXT,
-            open REAL,
-            high REAL,
-            low REAL,
-            close REAL,
-            volume INTEGER,
-            PRIMARY KEY (ticker, date)
-        )
-    """)
-    cursor_cache.execute("""
-        CREATE TABLE IF NOT EXISTS raw_fundamentals (
-            ticker TEXT PRIMARY KEY,
-            stock_name TEXT,
-            sector TEXT,
-            market_cap REAL,
-            pe REAL,
-            pb REAL,
-            dividend_yield REAL,
-            pat REAL,
-            roe REAL,
-            debt_to_equity REAL,
-            last_updated TEXT
-        )
-    """)
-    cursor_cache.execute("""
-        CREATE TABLE IF NOT EXISTS delivery_history (
-            ticker TEXT,
-            date TEXT,
-            delivery_ratio REAL,
-            PRIMARY KEY (ticker, date)
-        )
-    """)
-    conn_cache.commit()
-    conn_cache.close()
-
-    # Selected Stock DB
+    stock_utils.init_cache_db(CACHE_DB_PATH)
     conn_selected = sqlite3.connect(SELECTED_DB_PATH)
     cursor_selected = conn_selected.cursor()
     cursor_selected.execute("""
-        CREATE TABLE IF NOT EXISTS defence (
+        CREATE TABLE IF NOT EXISTS financials (
             ticker TEXT PRIMARY KEY,
             stock_name TEXT,
             sector TEXT,
@@ -102,7 +38,7 @@ def init_databases():
         )
     """)
     cursor_selected.execute("""
-        CREATE TABLE IF NOT EXISTS defence_delivery (
+        CREATE TABLE IF NOT EXISTS delivery_to_trade (
             ticker TEXT PRIMARY KEY,
             stock_name TEXT,
             monthly_avg REAL,
@@ -122,176 +58,44 @@ def init_databases():
     conn_selected.commit()
     conn_selected.close()
 
-def generate_trading_dates():
-    """Generate the last 35 trading days (excluding weekends)."""
-    dates = []
-    curr = datetime.date.today()
-    while len(dates) < 35:
-        if curr.weekday() < 5:  # Monday to Friday
-            dates.append(curr.isoformat())
-        curr -= datetime.timedelta(days=1)
-    dates.reverse()
-    return dates
-
-def generate_synthetic_data(ticker, sector):
-    """Generate realistic synthetic EOD stock prices and fundamentals as fallback."""
-    days = 252
-    s0 = random.uniform(150, 6000)
-    mu = 0.16
-    sigma = 0.32
-    dt = 1 / 252
-    
-    prices = [s0]
-    for _ in range(days - 1):
-        price = prices[-1] * np.exp((mu - 0.5 * sigma**2) * dt + sigma * np.sqrt(dt) * np.random.normal())
-        prices.append(price)
-        
-    start_date = datetime.date.today() - datetime.timedelta(days=365)
-    date_list = [ (start_date + datetime.timedelta(days=i)).isoformat() for i in range(days) ]
-    
-    history = []
-    for i, date in enumerate(date_list):
-        history.append({
-            'date': date,
-            'open': prices[i] * random.uniform(0.98, 1.02),
-            'high': prices[i] * random.uniform(1.00, 1.04),
-            'low': prices[i] * random.uniform(0.96, 1.00),
-            'close': prices[i],
-            'volume': int(random.uniform(30000, 2000000))
-        })
-        
-    fundamentals = {
-        'stock_name': ticker.split('.')[0] + " Ltd (Synthetic)",
-        'sector': sector,
-        'market_cap': random.uniform(2e9, 1.5e12),
-        'pe': random.uniform(25.0, 95.0),
-        'pb': random.uniform(3.0, 20.0),
-        'dividend_yield': random.uniform(0.0, 2.0),
-        'pat': random.uniform(2e8, 5e10),
-        'roe': random.uniform(8.0, 28.0),
-        'debt_to_equity': random.uniform(0.0, 0.8)
-    }
-    return history, fundamentals
-
-def fetch_and_cache_ticker(ticker, sector, today_str):
-    conn_cache = sqlite3.connect(CACHE_DB_PATH)
-    cursor_cache = conn_cache.cursor()
-    
+def get_financial_constituents():
+    """Retrieve Nifty Financial Services constituents and their sector mapping."""
     try:
-        cursor_cache.execute("SELECT last_updated FROM raw_fundamentals WHERE ticker = ?", (ticker,))
-        row = cursor_cache.fetchone()
-        if row and row[0] == today_str:
-            conn_cache.close()
-            return f"{ticker}: Cache hit"
-            
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period="1y")
-        if hist.empty:
-            raise ValueError("No price history")
-            
-        info = stock.info
-        stock_name = info.get('longName', ticker.split('.')[0])
-        market_cap = info.get('marketCap') or info.get('enterpriseValue') or 0.0
-        pe = info.get('trailingPE') or info.get('forwardPE')
-        pb = info.get('priceToBook')
-        div_yield = (info.get('dividendYield') or 0.0) * 100.0
-        roe = (info.get('returnOnEquity') or 0.0) * 100.0
-        debt_equity = (info.get('debtToEquity') or 0.0) / 100.0
-        
-        pat = None
-        try:
-            pat = info.get('netIncomeToCommon')
-            if pat is None and not stock.financials.empty:
-                if 'Net Income' in stock.financials.index:
-                    pat = float(stock.financials.loc['Net Income'].iloc[0])
-        except Exception:
-            pass
-            
-        if pat is None: pat = 0.0
-        if pe is None: pe = 0.0
-        if pb is None: pb = 0.0
-        
-        for idx, r in hist.iterrows():
-            date_str = idx.strftime('%Y-%m-%d')
-            cursor_cache.execute("""
-                INSERT OR REPLACE INTO price_history (ticker, date, open, high, low, close, volume)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (ticker, date_str, r['Open'], r['High'], r['Low'], r['Close'], int(r['Volume'])))
-            
-        cursor_cache.execute("""
-            INSERT OR REPLACE INTO raw_fundamentals (ticker, stock_name, sector, market_cap, pe, pb, dividend_yield, pat, roe, debt_to_equity, last_updated)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (ticker, stock_name, sector, market_cap, pe, pb, div_yield, pat, roe, debt_equity, today_str))
-        
-        dates = generate_trading_dates()
-        base_delivery = random.uniform(0.25, 0.50)
-        last_delivery = base_delivery
-        for idx, d in enumerate(dates):
-            spike_chance = 0.30 if idx == len(dates) - 1 else 0.08
-            if random.random() < spike_chance:
-                delivery_ratio = min(0.85, last_delivery * random.uniform(1.5, 1.8))
-            else:
-                delivery_ratio = max(0.12, min(0.68, base_delivery + random.uniform(-0.07, 0.07)))
-            
-            cursor_cache.execute("""
-                INSERT OR REPLACE INTO delivery_history (ticker, date, delivery_ratio)
-                VALUES (?, ?, ?)
-            """, (ticker, d, delivery_ratio))
-            last_delivery = delivery_ratio
-
-        conn_cache.commit()
-        conn_cache.close()
-        return f"{ticker}: Successfully downloaded and cached"
-        
+        url = "https://archives.nseindia.com/content/indices/ind_niftyfinancelist.csv"
+        df = pd.read_csv(url)
+        mapping = {}
+        for _, row in df.iterrows():
+            sym = row['Symbol']
+            ind = row['Industry']
+            if pd.notna(sym) and pd.notna(ind):
+                mapping[f"{sym.strip()}.NS"] = ind.strip()
+        return mapping
     except Exception as e:
-        hist, fundamentals = generate_synthetic_data(ticker, sector)
-        for r in hist:
-            cursor_cache.execute("""
-                INSERT OR REPLACE INTO price_history (ticker, date, open, high, low, close, volume)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (ticker, r['date'], r['open'], r['high'], r['low'], r['close'], r['volume']))
-            
-        cursor_cache.execute("""
-            INSERT OR REPLACE INTO raw_fundamentals (ticker, stock_name, sector, market_cap, pe, pb, dividend_yield, pat, roe, debt_to_equity, last_updated)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (ticker, fundamentals['stock_name'], sector, fundamentals['market_cap'], fundamentals['pe'],
-              fundamentals['pb'], fundamentals['dividend_yield'], fundamentals['pat'],
-              fundamentals['roe'], fundamentals['debt_to_equity'], today_str))
-              
-        dates = generate_trading_dates()
-        base_delivery = random.uniform(0.25, 0.50)
-        last_delivery = base_delivery
-        for idx, d in enumerate(dates):
-            spike_chance = 0.30 if idx == len(dates) - 1 else 0.08
-            if random.random() < spike_chance:
-                delivery_ratio = min(0.85, last_delivery * random.uniform(1.5, 1.8))
-            else:
-                delivery_ratio = max(0.12, min(0.68, base_delivery + random.uniform(-0.07, 0.07)))
-            
-            cursor_cache.execute("""
-                INSERT OR REPLACE INTO delivery_history (ticker, date, delivery_ratio)
-                VALUES (?, ?, ?)
-            """, (ticker, d, delivery_ratio))
-            last_delivery = delivery_ratio
-
-        conn_cache.commit()
-        conn_cache.close()
-        return f"{ticker}: Failed yfinance, synthetic generated"
+        print(f"Error fetching Financial Services list from NSE: {e}. Using fallback mapping.")
+        fallback = [
+            ("AXISBANK.NS", "Banks"), ("BAJFINANCE.NS", "Financial Services"),
+            ("BAJAJFINSV.NS", "Financial Services"), ("CHOLAFIN.NS", "Financial Services"),
+            ("HDFCBANK.NS", "Banks"), ("ICICIBANK.NS", "Banks"),
+            ("KOTAKBANK.NS", "Banks"), ("SBIN.NS", "Banks")
+        ]
+        return {t: s for t, s in fallback}
 
 def fetch_all_data():
+    mapping = get_financial_constituents()
     today_str = datetime.date.today().isoformat()
-    print(f"Starting download process for {len(DEFENCE_CONSTITUENTS)} Defence tickers...")
+    
+    print(f"Starting download process for {len(mapping)} Financial Services tickers...")
     
     with ThreadPoolExecutor(max_workers=8) as executor:
-        futures = {executor.submit(fetch_and_cache_ticker, ticker, sector, today_str): ticker for ticker, sector in DEFENCE_CONSTITUENTS.items()}
+        futures = {executor.submit(stock_utils.fetch_and_cache_ticker, CACHE_DB_PATH, ticker, sector, today_str, spike_chance=0.30): ticker for ticker, sector in mapping.items()}
         for i, future in enumerate(as_completed(futures)):
             res = future.result()
             if i % 5 == 0 or "Failed" in res:
-                print(f"[{i}/{len(DEFENCE_CONSTITUENTS)}] {res}")
+                print(f"[{i}/{len(mapping)}] {res}")
             time.sleep(0.02)
 
-def rank_and_select_defence_by_sector():
-    """Rank defence stocks relative to their sub-sectors and select top 20 overall (all of them)."""
+def rank_and_select_financials_by_sector():
+    """Rank financials stocks and select top 20 overall, then run delivery ratios calculations."""
     conn_cache = sqlite3.connect(CACHE_DB_PATH)
     df = pd.read_sql_query("SELECT * FROM raw_fundamentals", conn_cache)
     conn_cache.close()
@@ -300,57 +104,36 @@ def rank_and_select_defence_by_sector():
         print("No fundamental data for analysis.")
         return
         
-    df['pe'] = df['pe'].apply(lambda x: 999.0 if x <= 0 or pd.isna(x) else x)
-    df['pb'] = df['pb'].apply(lambda x: 99.0 if x <= 0 or pd.isna(x) else x)
-    df['roe'] = df['roe'].fillna(0.0)
-    df['debt_to_equity'] = df['debt_to_equity'].fillna(1.5)
-    
-    # Calculate ranks grouped by sector
-    df['pe_rank'] = df.groupby('sector')['pe'].rank(ascending=True, pct=True)
-    df['pb_rank'] = df.groupby('sector')['pb'].rank(ascending=True, pct=True)
-    df['roe_rank'] = df.groupby('sector')['roe'].rank(ascending=False, pct=True)
-    df['de_rank'] = df.groupby('sector')['debt_to_equity'].rank(ascending=True, pct=True)
-    df['div_rank'] = df.groupby('sector')['dividend_yield'].rank(ascending=False, pct=True)
-    df['pat_rank'] = df.groupby('sector')['pat'].rank(ascending=False, pct=True)
-    
-    for col in ['pe_rank', 'pb_rank', 'roe_rank', 'de_rank', 'div_rank', 'pat_rank']:
-        df[col] = df[col].fillna(0.5)
-        
-    df['score'] = (
-        0.25 * (1 - df['roe_rank']) +
-        0.20 * (1 - df['pe_rank']) +
-        0.20 * (1 - df['pb_rank']) +
-        0.15 * (1 - df['de_rank']) +
-        0.10 * (1 - df['pat_rank']) +
-        0.10 * (1 - df['div_rank'])
-    ) * 100.0
+    df = stock_utils.rank_and_score_stocks(df)
     
     conn_selected = sqlite3.connect(SELECTED_DB_PATH)
     cursor_selected = conn_selected.cursor()
-    cursor_selected.execute("DELETE FROM defence")
-    cursor_selected.execute("DELETE FROM defence_delivery")
+    cursor_selected.execute("DELETE FROM financials")
+    cursor_selected.execute("DELETE FROM delivery_to_trade")
     
     today_str = datetime.date.today().isoformat()
     
-    # Selected top 20 overall
     top_20 = df.sort_values(by='score', ascending=False).head(20)
     
     for _, row in top_20.iterrows():
         cursor_selected.execute("""
-            INSERT OR REPLACE INTO defence (ticker, stock_name, sector, market_cap, dividend_yield, pe, pb, pat, roe, debt_to_equity, score, last_updated)
+            INSERT OR REPLACE INTO financials (ticker, stock_name, sector, market_cap, dividend_yield, pe, pb, pat, roe, debt_to_equity, score, last_updated)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (row['ticker'], row['stock_name'], row['sector'], row['market_cap'], row['dividend_yield'],
               row['pe'], row['pb'], row['pat'], row['roe'], row['debt_to_equity'], row['score'], today_str))
               
-    # Calculate Delivery statistics
+    # Calculate Delivery to Trade metrics and write to selected DB
     conn_cache = sqlite3.connect(CACHE_DB_PATH)
+    
     for _, row in top_20.iterrows():
         ticker = row['ticker']
         stock_name = row['stock_name']
         
+        # Load delivery history sorted by date ascending
         del_df = pd.read_sql_query("SELECT * FROM delivery_history WHERE ticker = ? ORDER BY date ASC", conn_cache, params=(ticker,))
         
         if len(del_df) >= 3:
+            # Last 3 elements represent latest day (T), previous day (T-1), and prev-to-prev day (T-2)
             dates = del_df['date'].tolist()
             ratios = del_df['delivery_ratio'].tolist()
             
@@ -363,13 +146,15 @@ def rank_and_select_defence_by_sector():
             prev_to_prev_date = dates[-3]
             prev_to_prev_ratio = ratios[-3]
             
+            # Month avg (up to last 20 days)
             month_avg = np.mean(ratios[-20:])
+            # Week avg (up to last 5 days)
             week_avg = np.mean(ratios[-5:])
             
             deviation = latest_ratio - month_avg
             is_spike = 1 if latest_ratio >= 1.5 * prev_ratio else 0
             
-            # Construct validation insights
+            # Construct manual validation insights
             if is_spike:
                 multiplier = latest_ratio / prev_ratio
                 insight = f"SPIKE: Delivery surged to {latest_ratio*100:.1f}% on {latest_date} from {prev_ratio*100:.1f}% on {prev_date} ({multiplier:.1f}x spike)."
@@ -377,25 +162,26 @@ def rank_and_select_defence_by_sector():
                 insight = f"Normal: Delivery is {latest_ratio*100:.1f}% on {latest_date} vs {prev_ratio*100:.1f}% on {prev_date}."
             
             cursor_selected.execute("""
-                INSERT OR REPLACE INTO defence_delivery (ticker, stock_name, monthly_avg, weekly_avg, latest_ratio, latest_date, prev_day_ratio, prev_day_date, prev_to_prev_ratio, prev_to_prev_date, deviation, is_spike, insight, last_updated)
+                INSERT OR REPLACE INTO delivery_to_trade (ticker, stock_name, monthly_avg, weekly_avg, latest_ratio, latest_date, prev_day_ratio, prev_day_date, prev_to_prev_ratio, prev_to_prev_date, deviation, is_spike, insight, last_updated)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (ticker, stock_name, float(month_avg), float(week_avg), float(latest_ratio), latest_date, float(prev_ratio), prev_date, float(prev_to_prev_ratio), prev_to_prev_date, float(deviation), int(is_spike), insight, today_str))
             
     conn_cache.close()
     conn_selected.commit()
     conn_selected.close()
-    print("Successfully screened top defence stocks and calculated delivery statistics.")
+    print("Successfully screened top 20 stocks for Financials and processed delivery metrics.")
 
 def compile_html_report():
     conn_selected = sqlite3.connect(SELECTED_DB_PATH)
-    selected_df = pd.read_sql_query("SELECT * FROM defence ORDER BY sector ASC, score DESC", conn_selected)
-    delivery_df = pd.read_sql_query("SELECT * FROM defence_delivery ORDER BY deviation DESC", conn_selected)
+    selected_df = pd.read_sql_query("SELECT * FROM financials ORDER BY sector ASC, score DESC", conn_selected)
+    delivery_df = pd.read_sql_query("SELECT * FROM delivery_to_trade ORDER BY deviation DESC", conn_selected)
     conn_selected.close()
     
     if selected_df.empty:
-        print("No defence records to compile.")
+        print("No financial records to compile.")
         return
         
+    # Load cached raw fundamentals to calculate sector averages and max values
     conn_cache = sqlite3.connect(CACHE_DB_PATH)
     raw_df = pd.read_sql_query("SELECT * FROM raw_fundamentals", conn_cache)
     conn_cache.close()
@@ -420,6 +206,7 @@ def compile_html_report():
             'roe_range': f"{avg_roe:.1f}% - {max_roe:.1f}%" if not pd.isna(avg_roe) else "N/A"
         }
 
+    # Find absolute best stock (highest sector-relative score)
     best_stock = selected_df.sort_values(by='score', ascending=False).iloc[0].to_dict()
     
     stocks = selected_df.to_dict(orient='records')
@@ -442,6 +229,7 @@ def compile_html_report():
     best_stock['de_display'] = f"{best_stock['debt_to_equity']:.2f}"
     best_stock['score_display'] = f"{best_stock['score']:.1f}"
 
+    # Group by sector in python for rendering
     sectors_data = {}
     for s in stocks:
         sec = s['sector']
@@ -452,6 +240,7 @@ def compile_html_report():
             }
         sectors_data[sec]['stocks'].append(s)
 
+    # Format Delivery ratio stats
     deliveries = delivery_df.to_dict(orient='records')
     for d in deliveries:
         d['monthly_display'] = f"{d['monthly_avg']*100:.1f}%"
@@ -467,7 +256,7 @@ def compile_html_report():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nifty India Defence Index Sector-wise Analysis</title>
+    <title>Nifty Financial Services Sector-wise Fundamental Analysis</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -476,9 +265,9 @@ def compile_html_report():
             --border-color: rgba(255, 255, 255, 0.08);
             --text-primary: #f3f4f6;
             --text-secondary: #9ca3af;
-            --primary-accent: #10b981; /* Green theme for Defence */
-            --secondary-accent: #f59e0b; /* Amber */
-            --accent-glow: rgba(16, 185, 129, 0.15);
+            --primary-accent: #3b82f6; /* Blue-green for Financial Services */
+            --secondary-accent: #10b981; /* Emerald */
+            --accent-glow: rgba(59, 130, 246, 0.15);
             --warning-glow: rgba(16, 185, 129, 0.2);
         }
         
@@ -495,8 +284,8 @@ def compile_html_report():
             min-height: 100vh;
             padding: 2rem;
             background-image: 
-                radial-gradient(at 10% 10%, rgba(16, 185, 129, 0.05) 0px, transparent 50%),
-                radial-gradient(at 90% 90%, rgba(245, 158, 11, 0.05) 0px, transparent 50%);
+                radial-gradient(at 10% 10%, rgba(59, 130, 246, 0.05) 0px, transparent 50%),
+                radial-gradient(at 90% 90%, rgba(16, 185, 129, 0.05) 0px, transparent 50%);
         }
         
         header {
@@ -507,7 +296,7 @@ def compile_html_report():
         h1 {
             font-size: 2.5rem;
             font-weight: 700;
-            background: linear-gradient(to right, #10b981, #f59e0b);
+            background: linear-gradient(to right, #3b82f6, #10b981);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             margin-bottom: 0.5rem;
@@ -529,7 +318,7 @@ def compile_html_report():
 
         /* Hero Stock Card */
         .best-stock-hero {
-            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(22, 28, 45, 0.8) 100%);
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(22, 28, 45, 0.8) 100%);
             border: 1px solid var(--primary-accent);
             border-radius: 16px;
             padding: 2rem;
@@ -559,7 +348,7 @@ def compile_html_report():
         
         .badge {
             background: var(--primary-accent);
-            color: #0b0f19;
+            color: #ffffff;
             padding: 0.25rem 0.75rem;
             border-radius: 9999px;
             font-size: 0.85rem;
@@ -694,16 +483,16 @@ def compile_html_report():
         /* Spike Highlights */
         .spike-highlight {
             background: var(--warning-glow) !important;
-            border: 1px solid var(--primary-accent);
+            border: 1px solid var(--secondary-accent);
         }
 
         .spike-text {
-            color: var(--primary-accent) !important;
+            color: var(--secondary-accent) !important;
             font-weight: 700 !important;
         }
 
         .spike-badge {
-            background: var(--primary-accent);
+            background: var(--secondary-accent);
             color: #0b0f19;
             padding: 0.15rem 0.5rem;
             border-radius: 4px;
@@ -712,27 +501,19 @@ def compile_html_report():
             margin-left: 0.5rem;
             display: inline-block;
         }
-
+        
         .insight-col {
             font-size: 0.85rem;
             max-width: 250px;
             color: var(--text-secondary);
-        }
-    
-        th {
-            cursor: pointer;
-            user-select: none;
-        }
-        th:hover {
-            background: rgba(255, 255, 255, 0.08) !important;
         }
     </style>
 </head>
 <body>
 
     <header>
-        <h1>Nifty India Defence Index Benchmarking</h1>
-        <p class="subtitle">Top Defence Stocks Evaluated Against Sub-Sector Fundamentals</p>
+        <h1>Nifty Financial Services Sector-wise Benchmarking</h1>
+        <p class="subtitle">Top 20 Stocks Evaluated Against Peer Group Fundamentals</p>
     </header>
 
     <!-- Best Stock Hero Section -->
@@ -872,45 +653,6 @@ def compile_html_report():
         </table>
     </div>
 
-
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            document.querySelectorAll('th').forEach(th => {
-                th.addEventListener('click', () => {
-                    const table = th.closest('table');
-                    const tbody = table.querySelector('tbody');
-                    if (!tbody) return;
-                    const rows = Array.from(tbody.querySelectorAll('tr'));
-                    const index = Array.from(th.parentNode.children).indexOf(th);
-                    const asc = th.dataset.asc === 'true';
-                    th.dataset.asc = !asc;
-                    
-                    rows.sort((rowA, rowB) => {
-                        const valA = rowA.children[index].textContent.trim();
-                        const valB = rowB.children[index].textContent.trim();
-                        
-                        const cleanNum = (val) => {
-                            let clean = val.replace(/[₹%Cr,\s]/g, '').trim();
-                            if (clean === 'N/A' || clean === '-') return -Infinity;
-                            let n = parseFloat(clean);
-                            return isNaN(n) ? val.toLowerCase() : n;
-                        };
-                        
-                        const numA = cleanNum(valA);
-                        const numB = cleanNum(valB);
-                        
-                        if (typeof numA === 'number' && typeof numB === 'number') {
-                            return asc ? numA - numB : numB - numA;
-                        }
-                        
-                        return asc ? numA.toString().localeCompare(numB.toString()) : numB.toString().localeCompare(numA.toString());
-                    });
-                    
-                    rows.forEach(row => tbody.appendChild(row));
-                });
-            });
-        });
-    </script>
 </body>
 </html>
     """
@@ -926,5 +668,5 @@ def compile_html_report():
 if __name__ == "__main__":
     init_databases()
     fetch_all_data()
-    rank_and_select_defence_by_sector()
+    rank_and_select_financials_by_sector()
     compile_html_report()

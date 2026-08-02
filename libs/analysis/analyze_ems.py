@@ -1,86 +1,41 @@
 import os
 import sqlite3
 import datetime
-import random
 import time
-import numpy as np
 import pandas as pd
-import yfinance as yf
+import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from jinja2 import Template
+from libs.utility import stock_utils
 
-CACHE_DB_PATH = "data/cache/cdmo_cache.db"
+CACHE_DB_PATH = "data/cache/ems_cache.db"
 SELECTED_DB_PATH = "output/db/SelectedStock.db"
-HTML_REPORT_PATH = "output/htmls/CDMO.html"
+HTML_REPORT_PATH = "output/htmls/EMS.html"
 
 # Ensure directories exist
 os.makedirs("data/cache", exist_ok=True)
 os.makedirs("output/db", exist_ok=True)
 os.makedirs("output/htmls", exist_ok=True)
 
-# CDMO stocks with their sub-sectors
-CDMO_CONSTITUENTS = {
-    "DIVISLAB.NS": "Custom Synthesis & API",
-    "LAURUSLABS.NS": "Custom Synthesis & API",
-    "JUBLPHARMA.NS": "Custom Synthesis & API",
-    "CONCORDBIO.NS": "Custom Synthesis & API",
-    "SYNGENE.NS": "Biologics & Formulations",
-    "GLAND.NS": "Biologics & Formulations",
-    "PPLPHARMA.NS": "Biologics & Formulations",
-    "SUNPHARMA.NS": "Diversified CDMO & Pharma",
-    "DRREDDY.NS": "Diversified CDMO & Pharma",
-    "CIPLA.NS": "Diversified CDMO & Pharma",
-    "AUROPHARMA.NS": "Diversified CDMO & Pharma",
-    "ZYDUSLIFE.NS": "Diversified CDMO & Pharma"
+# EMS stocks with their sub-sectors
+EMS_CONSTITUENTS = {
+    "DIXON.NS": "Consumer Electronics",
+    "KAYNES.NS": "Specialized EMS",
+    "SYRMA.NS": "Specialized EMS",
+    "CYIENTDLM.NS": "Specialized EMS",
+    "AVALON.NS": "Specialized EMS",
+    "PGEL.NS": "Consumer Electronics",
+    "ELIN.NS": "Consumer Electronics",
+    "AMBER.NS": "Consumer Electronics",
+    "CENTUM.NS": "Specialized EMS"
 }
 
 def init_databases():
-    # Cache DB
-    conn_cache = sqlite3.connect(CACHE_DB_PATH)
-    cursor_cache = conn_cache.cursor()
-    cursor_cache.execute("""
-        CREATE TABLE IF NOT EXISTS price_history (
-            ticker TEXT,
-            date TEXT,
-            open REAL,
-            high REAL,
-            low REAL,
-            close REAL,
-            volume INTEGER,
-            PRIMARY KEY (ticker, date)
-        )
-    """)
-    cursor_cache.execute("""
-        CREATE TABLE IF NOT EXISTS raw_fundamentals (
-            ticker TEXT PRIMARY KEY,
-            stock_name TEXT,
-            sector TEXT,
-            market_cap REAL,
-            pe REAL,
-            pb REAL,
-            dividend_yield REAL,
-            pat REAL,
-            roe REAL,
-            debt_to_equity REAL,
-            last_updated TEXT
-        )
-    """)
-    cursor_cache.execute("""
-        CREATE TABLE IF NOT EXISTS delivery_history (
-            ticker TEXT,
-            date TEXT,
-            delivery_ratio REAL,
-            PRIMARY KEY (ticker, date)
-        )
-    """)
-    conn_cache.commit()
-    conn_cache.close()
-
-    # Selected Stock DB
+    stock_utils.init_cache_db(CACHE_DB_PATH)
     conn_selected = sqlite3.connect(SELECTED_DB_PATH)
     cursor_selected = conn_selected.cursor()
     cursor_selected.execute("""
-        CREATE TABLE IF NOT EXISTS cdmo (
+        CREATE TABLE IF NOT EXISTS ems (
             ticker TEXT PRIMARY KEY,
             stock_name TEXT,
             sector TEXT,
@@ -96,7 +51,7 @@ def init_databases():
         )
     """)
     cursor_selected.execute("""
-        CREATE TABLE IF NOT EXISTS cdmo_delivery (
+        CREATE TABLE IF NOT EXISTS ems_delivery (
             ticker TEXT PRIMARY KEY,
             stock_name TEXT,
             monthly_avg REAL,
@@ -116,176 +71,20 @@ def init_databases():
     conn_selected.commit()
     conn_selected.close()
 
-def generate_trading_dates():
-    """Generate the last 35 trading days (excluding weekends)."""
-    dates = []
-    curr = datetime.date.today()
-    while len(dates) < 35:
-        if curr.weekday() < 5:  # Monday to Friday
-            dates.append(curr.isoformat())
-        curr -= datetime.timedelta(days=1)
-    dates.reverse()
-    return dates
-
-def generate_synthetic_data(ticker, sector):
-    """Generate realistic synthetic EOD stock prices and fundamentals as fallback."""
-    days = 252
-    s0 = random.uniform(150, 8000)
-    img_growth = 0.15
-    sigma = 0.28
-    dt = 1 / 252
-    
-    prices = [s0]
-    for _ in range(days - 1):
-        price = prices[-1] * np.exp((img_growth - 0.5 * sigma**2) * dt + sigma * np.sqrt(dt) * np.random.normal())
-        prices.append(price)
-        
-    start_date = datetime.date.today() - datetime.timedelta(days=365)
-    date_list = [ (start_date + datetime.timedelta(days=i)).isoformat() for i in range(days) ]
-    
-    history = []
-    for i, date in enumerate(date_list):
-        history.append({
-            'date': date,
-            'open': prices[i] * random.uniform(0.98, 1.02),
-            'high': prices[i] * random.uniform(1.00, 1.04),
-            'low': prices[i] * random.uniform(0.96, 1.00),
-            'close': prices[i],
-            'volume': int(random.uniform(40000, 1800000))
-        })
-        
-    fundamentals = {
-        'stock_name': ticker.split('.')[0] + " Ltd (Synthetic)",
-        'sector': sector,
-        'market_cap': random.uniform(2e10, 2e12),
-        'pe': random.uniform(18.0, 75.0),
-        'pb': random.uniform(2.0, 12.0),
-        'dividend_yield': random.uniform(0.1, 2.5),
-        'pat': random.uniform(8e8, 8e10),
-        'roe': random.uniform(6.0, 22.0),
-        'debt_to_equity': random.uniform(0.0, 0.9)
-    }
-    return history, fundamentals
-
-def fetch_and_cache_ticker(ticker, sector, today_str):
-    conn_cache = sqlite3.connect(CACHE_DB_PATH)
-    cursor_cache = conn_cache.cursor()
-    
-    try:
-        cursor_cache.execute("SELECT last_updated FROM raw_fundamentals WHERE ticker = ?", (ticker,))
-        row = cursor_cache.fetchone()
-        if row and row[0] == today_str:
-            conn_cache.close()
-            return f"{ticker}: Cache hit"
-            
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period="1y")
-        if hist.empty:
-            raise ValueError("No price history")
-            
-        info = stock.info
-        stock_name = info.get('longName', ticker.split('.')[0])
-        market_cap = info.get('marketCap') or info.get('enterpriseValue') or 0.0
-        pe = info.get('trailingPE') or info.get('forwardPE')
-        pb = info.get('priceToBook')
-        div_yield = (info.get('dividendYield') or 0.0) * 100.0
-        roe = (info.get('returnOnEquity') or 0.0) * 100.0
-        debt_equity = (info.get('debtToEquity') or 0.0) / 100.0
-        
-        pat = None
-        try:
-            pat = info.get('netIncomeToCommon')
-            if pat is None and not stock.financials.empty:
-                if 'Net Income' in stock.financials.index:
-                    pat = float(stock.financials.loc['Net Income'].iloc[0])
-        except Exception:
-            pass
-            
-        if pat is None: pat = 0.0
-        if pe is None: pe = 0.0
-        if pb is None: pb = 0.0
-        
-        for idx, r in hist.iterrows():
-            date_str = idx.strftime('%Y-%m-%d')
-            cursor_cache.execute("""
-                INSERT OR REPLACE INTO price_history (ticker, date, open, high, low, close, volume)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (ticker, date_str, r['Open'], r['High'], r['Low'], r['Close'], int(r['Volume'])))
-            
-        cursor_cache.execute("""
-            INSERT OR REPLACE INTO raw_fundamentals (ticker, stock_name, sector, market_cap, pe, pb, dividend_yield, pat, roe, debt_to_equity, last_updated)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (ticker, stock_name, sector, market_cap, pe, pb, div_yield, pat, roe, debt_equity, today_str))
-        
-        dates = generate_trading_dates()
-        base_delivery = random.uniform(0.30, 0.55)
-        last_delivery = base_delivery
-        for idx, d in enumerate(dates):
-            spike_chance = 0.30 if idx == len(dates) - 1 else 0.08
-            if random.random() < spike_chance:
-                delivery_ratio = min(0.85, last_delivery * random.uniform(1.5, 1.8))
-            else:
-                delivery_ratio = max(0.15, min(0.70, base_delivery + random.uniform(-0.08, 0.08)))
-            
-            cursor_cache.execute("""
-                INSERT OR REPLACE INTO delivery_history (ticker, date, delivery_ratio)
-                VALUES (?, ?, ?)
-            """, (ticker, d, delivery_ratio))
-            last_delivery = delivery_ratio
-
-        conn_cache.commit()
-        conn_cache.close()
-        return f"{ticker}: Successfully downloaded and cached"
-        
-    except Exception as e:
-        hist, fundamentals = generate_synthetic_data(ticker, sector)
-        for r in hist:
-            cursor_cache.execute("""
-                INSERT OR REPLACE INTO price_history (ticker, date, open, high, low, close, volume)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (ticker, r['date'], r['open'], r['high'], r['low'], r['close'], r['volume']))
-            
-        cursor_cache.execute("""
-            INSERT OR REPLACE INTO raw_fundamentals (ticker, stock_name, sector, market_cap, pe, pb, dividend_yield, pat, roe, debt_to_equity, last_updated)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (ticker, fundamentals['stock_name'], sector, fundamentals['market_cap'], fundamentals['pe'],
-              fundamentals['pb'], fundamentals['dividend_yield'], fundamentals['pat'],
-              fundamentals['roe'], fundamentals['debt_to_equity'], today_str))
-              
-        dates = generate_trading_dates()
-        base_delivery = random.uniform(0.30, 0.55)
-        last_delivery = base_delivery
-        for idx, d in enumerate(dates):
-            spike_chance = 0.30 if idx == len(dates) - 1 else 0.08
-            if random.random() < spike_chance:
-                delivery_ratio = min(0.85, last_delivery * random.uniform(1.5, 1.8))
-            else:
-                delivery_ratio = max(0.15, min(0.70, base_delivery + random.uniform(-0.08, 0.08)))
-            
-            cursor_cache.execute("""
-                INSERT OR REPLACE INTO delivery_history (ticker, date, delivery_ratio)
-                VALUES (?, ?, ?)
-            """, (ticker, d, delivery_ratio))
-            last_delivery = delivery_ratio
-
-        conn_cache.commit()
-        conn_cache.close()
-        return f"{ticker}: Failed yfinance, synthetic generated"
-
 def fetch_all_data():
     today_str = datetime.date.today().isoformat()
-    print(f"Starting download process for {len(CDMO_CONSTITUENTS)} CDMO tickers...")
+    print(f"Starting download process for {len(EMS_CONSTITUENTS)} EMS tickers...")
     
     with ThreadPoolExecutor(max_workers=8) as executor:
-        futures = {executor.submit(fetch_and_cache_ticker, ticker, sector, today_str): ticker for ticker, sector in CDMO_CONSTITUENTS.items()}
+        futures = {executor.submit(stock_utils.fetch_and_cache_ticker, CACHE_DB_PATH, ticker, sector, today_str, spike_chance=0.30): ticker for ticker, sector in EMS_CONSTITUENTS.items()}
         for i, future in enumerate(as_completed(futures)):
             res = future.result()
             if i % 5 == 0 or "Failed" in res:
-                print(f"[{i}/{len(CDMO_CONSTITUENTS)}] {res}")
+                print(f"[{i}/{len(EMS_CONSTITUENTS)}] {res}")
             time.sleep(0.02)
 
-def rank_and_select_cdmo_by_sector():
-    """Rank CDMO stocks relative to their sub-sectors and select top 20 overall (all of them)."""
+def rank_and_select_ems_by_sector():
+    """Rank EMS stocks relative to their sub-sectors and select top 20 overall (all of them)."""
     conn_cache = sqlite3.connect(CACHE_DB_PATH)
     df = pd.read_sql_query("SELECT * FROM raw_fundamentals", conn_cache)
     conn_cache.close()
@@ -294,35 +93,12 @@ def rank_and_select_cdmo_by_sector():
         print("No fundamental data for analysis.")
         return
         
-    df['pe'] = df['pe'].apply(lambda x: 999.0 if x <= 0 or pd.isna(x) else x)
-    df['pb'] = df['pb'].apply(lambda x: 99.0 if x <= 0 or pd.isna(x) else x)
-    df['roe'] = df['roe'].fillna(0.0)
-    df['debt_to_equity'] = df['debt_to_equity'].fillna(1.5)
-    
-    # Calculate ranks grouped by sector
-    df['pe_rank'] = df.groupby('sector')['pe'].rank(ascending=True, pct=True)
-    df['pb_rank'] = df.groupby('sector')['pb'].rank(ascending=True, pct=True)
-    df['roe_rank'] = df.groupby('sector')['roe'].rank(ascending=False, pct=True)
-    df['de_rank'] = df.groupby('sector')['debt_to_equity'].rank(ascending=True, pct=True)
-    df['div_rank'] = df.groupby('sector')['dividend_yield'].rank(ascending=False, pct=True)
-    df['pat_rank'] = df.groupby('sector')['pat'].rank(ascending=False, pct=True)
-    
-    for col in ['pe_rank', 'pb_rank', 'roe_rank', 'de_rank', 'div_rank', 'pat_rank']:
-        df[col] = df[col].fillna(0.5)
-        
-    df['score'] = (
-        0.25 * (1 - df['roe_rank']) +
-        0.20 * (1 - df['pe_rank']) +
-        0.20 * (1 - df['pb_rank']) +
-        0.15 * (1 - df['de_rank']) +
-        0.10 * (1 - df['pat_rank']) +
-        0.10 * (1 - df['div_rank'])
-    ) * 100.0
+    df = stock_utils.rank_and_score_stocks(df)
     
     conn_selected = sqlite3.connect(SELECTED_DB_PATH)
     cursor_selected = conn_selected.cursor()
-    cursor_selected.execute("DELETE FROM cdmo")
-    cursor_selected.execute("DELETE FROM cdmo_delivery")
+    cursor_selected.execute("DELETE FROM ems")
+    cursor_selected.execute("DELETE FROM ems_delivery")
     
     today_str = datetime.date.today().isoformat()
     
@@ -331,7 +107,7 @@ def rank_and_select_cdmo_by_sector():
     
     for _, row in top_20.iterrows():
         cursor_selected.execute("""
-            INSERT OR REPLACE INTO cdmo (ticker, stock_name, sector, market_cap, dividend_yield, pe, pb, pat, roe, debt_to_equity, score, last_updated)
+            INSERT OR REPLACE INTO ems (ticker, stock_name, sector, market_cap, dividend_yield, pe, pb, pat, roe, debt_to_equity, score, last_updated)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (row['ticker'], row['stock_name'], row['sector'], row['market_cap'], row['dividend_yield'],
               row['pe'], row['pb'], row['pat'], row['roe'], row['debt_to_equity'], row['score'], today_str))
@@ -371,23 +147,23 @@ def rank_and_select_cdmo_by_sector():
                 insight = f"Normal: Delivery is {latest_ratio*100:.1f}% on {latest_date} vs {prev_ratio*100:.1f}% on {prev_date}."
             
             cursor_selected.execute("""
-                INSERT OR REPLACE INTO cdmo_delivery (ticker, stock_name, monthly_avg, weekly_avg, latest_ratio, latest_date, prev_day_ratio, prev_day_date, prev_to_prev_ratio, prev_to_prev_date, deviation, is_spike, insight, last_updated)
+                INSERT OR REPLACE INTO ems_delivery (ticker, stock_name, monthly_avg, weekly_avg, latest_ratio, latest_date, prev_day_ratio, prev_day_date, prev_to_prev_ratio, prev_to_prev_date, deviation, is_spike, insight, last_updated)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (ticker, stock_name, float(month_avg), float(week_avg), float(latest_ratio), latest_date, float(prev_ratio), prev_date, float(prev_to_prev_ratio), prev_to_prev_date, float(deviation), int(is_spike), insight, today_str))
             
     conn_cache.close()
     conn_selected.commit()
     conn_selected.close()
-    print("Successfully screened top CDMO stocks and calculated delivery statistics.")
+    print("Successfully screened top EMS stocks and calculated delivery statistics.")
 
 def compile_html_report():
     conn_selected = sqlite3.connect(SELECTED_DB_PATH)
-    selected_df = pd.read_sql_query("SELECT * FROM cdmo ORDER BY sector ASC, score DESC", conn_selected)
-    delivery_df = pd.read_sql_query("SELECT * FROM cdmo_delivery ORDER BY deviation DESC", conn_selected)
+    selected_df = pd.read_sql_query("SELECT * FROM ems ORDER BY sector ASC, score DESC", conn_selected)
+    delivery_df = pd.read_sql_query("SELECT * FROM ems_delivery ORDER BY deviation DESC", conn_selected)
     conn_selected.close()
     
     if selected_df.empty:
-        print("No CDMO records to compile.")
+        print("No EMS records to compile.")
         return
         
     conn_cache = sqlite3.connect(CACHE_DB_PATH)
@@ -461,7 +237,7 @@ def compile_html_report():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CDMO Sector Peer-wise Benchmarking</title>
+    <title>Electronics Manufacturing Services (EMS) Sector-wise Analysis</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -470,9 +246,9 @@ def compile_html_report():
             --border-color: rgba(255, 255, 255, 0.08);
             --text-primary: #f3f4f6;
             --text-secondary: #9ca3af;
-            --primary-accent: #3b82f6; /* Blue theme for CDMO */
-            --secondary-accent: #f59e0b; /* Amber */
-            --accent-glow: rgba(59, 130, 246, 0.15);
+            --primary-accent: #f59e0b; /* Amber theme for Electronics */
+            --secondary-accent: #10b981; /* Emerald */
+            --accent-glow: rgba(245, 158, 11, 0.15);
             --warning-glow: rgba(16, 185, 129, 0.2);
         }
         
@@ -489,8 +265,8 @@ def compile_html_report():
             min-height: 100vh;
             padding: 2rem;
             background-image: 
-                radial-gradient(at 10% 10%, rgba(59, 130, 246, 0.05) 0px, transparent 50%),
-                radial-gradient(at 90% 90%, rgba(245, 158, 11, 0.05) 0px, transparent 50%);
+                radial-gradient(at 10% 10%, rgba(245, 158, 11, 0.05) 0px, transparent 50%),
+                radial-gradient(at 90% 90%, rgba(16, 185, 129, 0.05) 0px, transparent 50%);
         }
         
         header {
@@ -501,7 +277,7 @@ def compile_html_report():
         h1 {
             font-size: 2.5rem;
             font-weight: 700;
-            background: linear-gradient(to right, #3b82f6, #f59e0b);
+            background: linear-gradient(to right, #f59e0b, #10b981);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             margin-bottom: 0.5rem;
@@ -523,7 +299,7 @@ def compile_html_report():
 
         /* Hero Stock Card */
         .best-stock-hero {
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(22, 28, 45, 0.8) 100%);
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(22, 28, 45, 0.8) 100%);
             border: 1px solid var(--primary-accent);
             border-radius: 16px;
             padding: 2rem;
@@ -553,7 +329,7 @@ def compile_html_report():
         
         .badge {
             background: var(--primary-accent);
-            color: #ffffff;
+            color: #0b0f19;
             padding: 0.25rem 0.75rem;
             border-radius: 9999px;
             font-size: 0.85rem;
@@ -712,21 +488,13 @@ def compile_html_report():
             max-width: 250px;
             color: var(--text-secondary);
         }
-    
-        th {
-            cursor: pointer;
-            user-select: none;
-        }
-        th:hover {
-            background: rgba(255, 255, 255, 0.08) !important;
-        }
     </style>
 </head>
 <body>
 
     <header>
-        <h1>CDMO Sector Peer-wise Benchmarking</h1>
-        <p class="subtitle">Contract Development & Manufacturing Companies Evaluated Against Sub-Sector Fundamentals</p>
+        <h1>EMS Sector Peer-wise Benchmarking</h1>
+        <p class="subtitle">Electronics Manufacturing Services Evaluated Against Sub-Sector Fundamentals</p>
     </header>
 
     <!-- Best Stock Hero Section -->
@@ -866,45 +634,6 @@ def compile_html_report():
         </table>
     </div>
 
-
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            document.querySelectorAll('th').forEach(th => {
-                th.addEventListener('click', () => {
-                    const table = th.closest('table');
-                    const tbody = table.querySelector('tbody');
-                    if (!tbody) return;
-                    const rows = Array.from(tbody.querySelectorAll('tr'));
-                    const index = Array.from(th.parentNode.children).indexOf(th);
-                    const asc = th.dataset.asc === 'true';
-                    th.dataset.asc = !asc;
-                    
-                    rows.sort((rowA, rowB) => {
-                        const valA = rowA.children[index].textContent.trim();
-                        const valB = rowB.children[index].textContent.trim();
-                        
-                        const cleanNum = (val) => {
-                            let clean = val.replace(/[₹%Cr,\s]/g, '').trim();
-                            if (clean === 'N/A' || clean === '-') return -Infinity;
-                            let n = parseFloat(clean);
-                            return isNaN(n) ? val.toLowerCase() : n;
-                        };
-                        
-                        const numA = cleanNum(valA);
-                        const numB = cleanNum(valB);
-                        
-                        if (typeof numA === 'number' && typeof numB === 'number') {
-                            return asc ? numA - numB : numB - numA;
-                        }
-                        
-                        return asc ? numA.toString().localeCompare(numB.toString()) : numB.toString().localeCompare(numA.toString());
-                    });
-                    
-                    rows.forEach(row => tbody.appendChild(row));
-                });
-            });
-        });
-    </script>
 </body>
 </html>
     """
@@ -920,5 +649,5 @@ def compile_html_report():
 if __name__ == "__main__":
     init_databases()
     fetch_all_data()
-    rank_and_select_cdmo_by_sector()
+    rank_and_select_ems_by_sector()
     compile_html_report()

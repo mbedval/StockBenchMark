@@ -1,11 +1,11 @@
 import os
 import sqlite3
 import datetime
-import random
-import numpy as np
+import time
 import pandas as pd
-import yfinance as yf
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from jinja2 import Template
+from libs.utility import stock_utils
 
 # Tickers to analyze
 TICKERS = [
@@ -27,39 +27,7 @@ os.makedirs("output/db", exist_ok=True)
 os.makedirs("output/htmls", exist_ok=True)
 
 def init_databases():
-    # Cache DB
-    conn_cache = sqlite3.connect(CACHE_DB_PATH)
-    cursor_cache = conn_cache.cursor()
-    cursor_cache.execute("""
-        CREATE TABLE IF NOT EXISTS price_history (
-            ticker TEXT,
-            date TEXT,
-            open REAL,
-            high REAL,
-            low REAL,
-            close REAL,
-            volume INTEGER,
-            PRIMARY KEY (ticker, date)
-        )
-    """)
-    cursor_cache.execute("""
-        CREATE TABLE IF NOT EXISTS raw_fundamentals (
-            ticker TEXT PRIMARY KEY,
-            stock_name TEXT,
-            market_cap REAL,
-            pe REAL,
-            pb REAL,
-            dividend_yield REAL,
-            pat REAL,
-            roe REAL,
-            debt_to_equity REAL,
-            last_updated TEXT
-        )
-    """)
-    conn_cache.commit()
-    conn_cache.close()
-
-    # Selected Stock DB
+    stock_utils.init_cache_db(CACHE_DB_PATH)
     conn_selected = sqlite3.connect(SELECTED_DB_PATH)
     cursor_selected = conn_selected.cursor()
     cursor_selected.execute("""
@@ -80,136 +48,11 @@ def init_databases():
     conn_selected.commit()
     conn_selected.close()
 
-def generate_synthetic_data(ticker):
-    """Generate realistic synthetic EOD stock prices and fundamentals as fallback."""
-    print(f"Generating synthetic fallback data for {ticker}...")
-    # Stock price path (Geometric Brownian Motion)
-    days = 252
-    s0 = random.uniform(200, 5000)
-    mu = 0.12  # 12% drift
-    sigma = 0.25  # 25% volatility
-    dt = 1 / 252
-    
-    prices = [s0]
-    for _ in range(days - 1):
-        price = prices[-1] * np.exp((mu - 0.5 * sigma**2) * dt + sigma * np.sqrt(dt) * np.random.normal())
-        prices.append(price)
-        
-    start_date = datetime.date.today() - datetime.timedelta(days=365)
-    date_list = [ (start_date + datetime.timedelta(days=i)).isoformat() for i in range(days) ]
-    
-    history = []
-    for i, date in enumerate(date_list):
-        history.append({
-            'date': date,
-            'open': prices[i] * random.uniform(0.98, 1.02),
-            'high': prices[i] * random.uniform(1.00, 1.04),
-            'low': prices[i] * random.uniform(0.96, 1.00),
-            'close': prices[i],
-            'volume': int(random.uniform(50000, 2000000))
-        })
-        
-    # Fundamentals fallback
-    fundamentals = {
-        'stock_name': ticker.split('.')[0] + " Pharmaceuticals Ltd (Synthetic)",
-        'market_cap': random.uniform(1e9, 1e12), # In INR
-        'pe': random.uniform(15.0, 75.0),
-        'pb': random.uniform(1.5, 12.0),
-        'dividend_yield': random.uniform(0.1, 3.5), # Percentage
-        'pat': random.uniform(1e8, 1e11), # Annual net income in INR
-        'roe': random.uniform(5.0, 30.0), # Percentage
-        'debt_to_equity': random.uniform(0.01, 1.2)
-    }
-    return history, fundamentals
-
 def fetch_and_cache_data():
-    conn_cache = sqlite3.connect(CACHE_DB_PATH)
-    cursor_cache = conn_cache.cursor()
-    
     today_str = datetime.date.today().isoformat()
-    
     for ticker in TICKERS:
-        # Check if cache is fresh (updated today)
-        cursor_cache.execute("SELECT last_updated FROM raw_fundamentals WHERE ticker = ?", (ticker,))
-        row = cursor_cache.fetchone()
-        
-        if row and row[0] == today_str:
-            print(f"Cache hit for {ticker}. Skipping API call.")
-            continue
-            
-        # If no fresh cache, attempt to download
-        try:
-            print(f"Downloading data for {ticker} from yfinance...")
-            stock = yf.Ticker(ticker)
-            
-            # Fetch 1 year history
-            hist = stock.history(period="1y")
-            if hist.empty:
-                raise ValueError(f"No history data returned for {ticker}")
-                
-            # Fetch fundamentals
-            info = stock.info
-            stock_name = info.get('longName', ticker.split('.')[0] + " Pharmaceuticals")
-            market_cap = info.get('marketCap') or info.get('enterpriseValue') or 0.0
-            pe = info.get('trailingPE') or info.get('forwardPE')
-            pb = info.get('priceToBook')
-            div_yield = (info.get('dividendYield') or 0.0) * 100.0  # Convert to percent
-            roe = (info.get('returnOnEquity') or 0.0) * 100.0  # Convert to percent
-            debt_equity = (info.get('debtToEquity') or 0.0) / 100.0  # yfinance DE is usually represented in % (e.g. 50 meaning 0.5)
-            
-            # Retrieve Net Income / PAT
-            pat = None
-            try:
-                # Try getting from netIncomeToCommon
-                pat = info.get('netIncomeToCommon')
-                # If not present, try trailing financials
-                if pat is None and not stock.financials.empty:
-                    if 'Net Income' in stock.financials.index:
-                        pat = float(stock.financials.loc['Net Income'].iloc[0])
-            except Exception:
-                pass
-            
-            if pat is None:
-                pat = 0.0
-            if pe is None:
-                pe = 0.0
-            if pb is None:
-                pb = 0.0
-                
-            # Write price history to cache
-            for idx, r in hist.iterrows():
-                date_str = idx.strftime('%Y-%m-%d')
-                cursor_cache.execute("""
-                    INSERT OR REPLACE INTO price_history (ticker, date, open, high, low, close, volume)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (ticker, date_str, r['Open'], r['High'], r['Low'], r['Close'], int(r['Volume'])))
-                
-            # Write fundamentals to cache
-            cursor_cache.execute("""
-                INSERT OR REPLACE INTO raw_fundamentals (ticker, stock_name, market_cap, pe, pb, dividend_yield, pat, roe, debt_to_equity, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (ticker, stock_name, market_cap, pe, pb, div_yield, pat, roe, debt_equity, today_str))
-            
-        except Exception as e:
-            print(f"Error fetching data for {ticker} via yfinance: {e}")
-            # Generate synthetic fallback
-            hist, fundamentals = generate_synthetic_data(ticker)
-            
-            for r in hist:
-                cursor_cache.execute("""
-                    INSERT OR REPLACE INTO price_history (ticker, date, open, high, low, close, volume)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (ticker, r['date'], r['open'], r['high'], r['low'], r['close'], r['volume']))
-                
-            cursor_cache.execute("""
-                INSERT OR REPLACE INTO raw_fundamentals (ticker, stock_name, market_cap, pe, pb, dividend_yield, pat, roe, debt_to_equity, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (ticker, fundamentals['stock_name'], fundamentals['market_cap'], fundamentals['pe'],
-                  fundamentals['pb'], fundamentals['dividend_yield'], fundamentals['pat'],
-                  fundamentals['roe'], fundamentals['debt_to_equity'], today_str))
-                  
-        conn_cache.commit()
-    conn_cache.close()
+        res = stock_utils.fetch_and_cache_ticker(CACHE_DB_PATH, ticker, "Pharmaceuticals", today_str, spike_chance=0.0)
+        print(res)
 
 def rank_and_select_pharma():
     """Perform statistical fundamental scoring and select the top 20 stocks."""
@@ -221,49 +64,16 @@ def rank_and_select_pharma():
         print("No fundamental data available for analysis.")
         return
         
-    # Replace negative/null/zero PE/PB with high numbers for ranking, or sector averages
-    df['pe'] = df['pe'].apply(lambda x: 999.0 if x <= 0 or pd.isna(x) else x)
-    df['pb'] = df['pb'].apply(lambda x: 99.0 if x <= 0 or pd.isna(x) else x)
-    df['roe'] = df['roe'].fillna(0.0)
-    df['debt_to_equity'] = df['debt_to_equity'].fillna(2.0) # Assume higher debt if missing
+    df['sector'] = "Pharmaceuticals"
+    df = stock_utils.rank_and_score_stocks(df)
     
-    # Calculate ranks (percentiles)
-    # Lower PE is better
-    df['pe_rank'] = df['pe'].rank(ascending=True, pct=True)
-    # Lower PB is better
-    df['pb_rank'] = df['pb'].rank(ascending=True, pct=True)
-    # Higher ROE is better
-    df['roe_rank'] = df['roe'].rank(ascending=False, pct=True)
-    # Lower Debt to Equity is better
-    df['de_rank'] = df['debt_to_equity'].rank(ascending=True, pct=True)
-    # Higher Dividend Yield is better
-    df['div_rank'] = df['dividend_yield'].rank(ascending=False, pct=True)
-    # Higher PAT is positive
-    df['pat_rank'] = df['pat'].rank(ascending=False, pct=True)
-    
-    # Fundamental Scoring: lower average rank percentile is better.
-    # Convert rank percentiles to scores (1 - rank) so higher score is better.
-    # Weights: ROE (25%), PE (20%), PB (20%), Debt to Equity (15%), PAT (10%), Dividend Yield (10%)
-    df['score'] = (
-        0.25 * (1 - df['roe_rank']) +
-        0.20 * (1 - df['pe_rank']) +
-        0.20 * (1 - df['pb_rank']) +
-        0.15 * (1 - df['de_rank']) +
-        0.10 * (1 - df['pat_rank']) +
-        0.10 * (1 - df['div_rank'])
-    ) * 100.0
-    
-    # Sort and pick top 20
     top_20 = df.sort_values(by='score', ascending=False).head(20)
     
-    # Write to SelectedStock.db with deduplication / insert or replace
     conn_selected = sqlite3.connect(SELECTED_DB_PATH)
     cursor_selected = conn_selected.cursor()
-    
     today_str = datetime.date.today().isoformat()
     
     for _, row in top_20.iterrows():
-        # Using INSERT OR REPLACE (deduplication)
         cursor_selected.execute("""
             INSERT OR REPLACE INTO pharma (ticker, stock_name, market_cap, dividend_yield, pe, pb, pat, roe, debt_to_equity, score, last_updated)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -570,14 +380,6 @@ def compile_html_report():
                 width: 100%;
             }
         }
-    
-        th {
-            cursor: pointer;
-            user-select: none;
-        }
-        th:hover {
-            background: rgba(255, 255, 255, 0.08) !important;
-        }
     </style>
 </head>
 <body>
@@ -772,45 +574,6 @@ def compile_html_report():
             });
             arr.forEach(row => tbody.appendChild(row));
         }
-    </script>
-
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            document.querySelectorAll('th').forEach(th => {
-                th.addEventListener('click', () => {
-                    const table = th.closest('table');
-                    const tbody = table.querySelector('tbody');
-                    if (!tbody) return;
-                    const rows = Array.from(tbody.querySelectorAll('tr'));
-                    const index = Array.from(th.parentNode.children).indexOf(th);
-                    const asc = th.dataset.asc === 'true';
-                    th.dataset.asc = !asc;
-                    
-                    rows.sort((rowA, rowB) => {
-                        const valA = rowA.children[index].textContent.trim();
-                        const valB = rowB.children[index].textContent.trim();
-                        
-                        const cleanNum = (val) => {
-                            let clean = val.replace(/[₹%Cr,\s]/g, '').trim();
-                            if (clean === 'N/A' || clean === '-') return -Infinity;
-                            let n = parseFloat(clean);
-                            return isNaN(n) ? val.toLowerCase() : n;
-                        };
-                        
-                        const numA = cleanNum(valA);
-                        const numB = cleanNum(valB);
-                        
-                        if (typeof numA === 'number' && typeof numB === 'number') {
-                            return asc ? numA - numB : numB - numA;
-                        }
-                        
-                        return asc ? numA.toString().localeCompare(numB.toString()) : numB.toString().localeCompare(numA.toString());
-                    });
-                    
-                    rows.forEach(row => tbody.appendChild(row));
-                });
-            });
-        });
     </script>
 </body>
 </html>
