@@ -18,7 +18,19 @@ DELIVERY_TABLES = {
     "diversified_financials_delivery": "Diversified Financials",
     "asset_management_delivery": "Asset Management",
     "specialized_finance_delivery": "Specialized Finance",
-    "tech_hardware_delivery": "Technology Hardware"
+    "tech_hardware_delivery": "Technology Hardware",
+    "commodity_chemicals_delivery": "Commodity Chemicals",
+    "diversified_chemicals_delivery": "Diversified Chemicals",
+    "speciality_chemicals_delivery": "Speciality Chemicals",
+    "real_estate_delivery": "Real Estate",
+    "power_infrastructure_delivery": "Power Infrastructure",
+    "renewables_delivery": "Renewables",
+    "water_management_delivery": "Water Management",
+    "plastic_products_delivery": "Plastic Products",
+    "cements_delivery": "Cements",
+    "communication_networking_delivery": "Communication & Networking",
+    "electronic_equipments_delivery": "Electronic Equipments",
+    "software_services_delivery": "Software Services"
 }
 
 def generate_report():
@@ -58,6 +70,26 @@ def generate_report():
         r['prev_display'] = f"{r['prev_day_ratio']*100:.1f}%"
         r['prev_to_prev_display'] = f"{r['prev_to_prev_ratio']*100:.1f}%"
         r['dev_display'] = f"+{r['deviation']*100:.1f}%" if r['deviation'] >= 0 else f"{r['deviation']*100:.1f}%"
+
+    sector_summary = []
+    if not combined_df.empty:
+        summary_df = combined_df.groupby('sector').agg(
+            avg_deviation=('deviation', 'mean'),
+            spike_count=('deviation', 'count')
+        ).reset_index()
+        summary_df = summary_df.sort_values(by='avg_deviation', ascending=False)
+        for _, row in summary_df.iterrows():
+            avg_dev = row['avg_deviation']
+            color_weight = min(0.65, max(0.12, float(avg_dev) * 1.5))
+            border_weight = min(0.85, max(0.25, float(avg_dev) * 2.0))
+            sector_summary.append({
+                'sector': row['sector'],
+                'avg_deviation': avg_dev,
+                'spike_count': int(row['spike_count']),
+                'dev_display': f"+{avg_dev*100:.1f}%" if avg_dev >= 0 else f"{avg_dev*100:.1f}%",
+                'color_weight': f"{color_weight:.2f}",
+                'border_weight': f"{border_weight:.2f}"
+            })
 
     html_template = """
 <!DOCTYPE html>
@@ -215,6 +247,74 @@ def generate_report():
         th:hover {
             background: rgba(255, 255, 255, 0.08) !important;
         }
+
+        /* Heatmap CSS */
+        .section-title {
+            max-width: 1200px;
+            margin: 2.5rem auto 1rem auto;
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .heatmap-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 0.6rem;
+            max-width: 1200px;
+            margin: 0 auto 2rem auto;
+        }
+        
+        .heatmap-card {
+            border-radius: 8px;
+            padding: 0.5rem 0.65rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+            transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s ease, box-shadow 0.2s ease;
+            backdrop-filter: blur(8px);
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .heatmap-card:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .heatmap-card.active {
+            border-color: #ec4899 !important;
+            box-shadow: 0 0 12px rgba(236, 72, 153, 0.4);
+            transform: scale(1.02) translateY(-1px);
+        }
+        
+        .heatmap-sector-name {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.3rem;
+            line-height: 1.2;
+        }
+        
+        .heatmap-stats {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.72rem;
+        }
+        
+        .heatmap-count {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 0.1rem 0.25rem;
+            border-radius: 4px;
+            color: var(--text-secondary);
+        }
+        
+        .heatmap-dev {
+            font-weight: 700;
+            color: #10b981;
+        }
     </style>
 </head>
 <body>
@@ -223,6 +323,21 @@ def generate_report():
         <h1>High Delivery to Trade Spikes</h1>
         <p class="subtitle">Real-time Delivery Ratio Spikes of 1.5x or More Across Screened Sectors</p>
     </header>
+
+    {% if sector_summary %}
+    <h2 class="section-title">Sector Activity Heatmap (Avg Spike Deviation)</h2>
+    <div class="heatmap-container">
+        {% for sec in sector_summary %}
+        <div class="heatmap-card" style="background: rgba(16, 185, 129, {{ sec.color_weight }}); border: 1px solid rgba(16, 185, 129, {{ sec.border_weight }});">
+            <div class="heatmap-sector-name">{{ sec.sector }}</div>
+            <div class="heatmap-stats">
+                <span class="heatmap-count">{{ sec.spike_count }} Spikes</span>
+                <span class="heatmap-dev">{{ sec.dev_display }}</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
 
     <div class="table-container">
         {% if records %}
@@ -280,17 +395,51 @@ def generate_report():
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            const cards = document.querySelectorAll('.heatmap-card');
+            const rows = Array.from(document.querySelectorAll('tbody tr'));
+            let activeFilter = null;
+
+            cards.forEach(card => {
+                card.addEventListener('click', () => {
+                    const sector = card.querySelector('.heatmap-sector-name').textContent.trim();
+                    
+                    if (activeFilter === sector) {
+                        // Clicked same card, reset filter
+                        activeFilter = null;
+                        card.classList.remove('active');
+                        rows.forEach(row => row.style.display = '');
+                    } else {
+                        // Reset all active classes
+                        cards.forEach(c => c.classList.remove('active'));
+                        
+                        // Set current card active
+                        card.classList.add('active');
+                        activeFilter = sector;
+
+                        // Filter rows
+                        rows.forEach(row => {
+                            const rowSector = row.querySelector('.sector-badge').textContent.trim();
+                            if (rowSector === sector) {
+                                row.style.display = '';
+                            } else {
+                                row.style.display = 'none';
+                            }
+                        });
+                    }
+                });
+            });
+
             document.querySelectorAll('th').forEach(th => {
                 th.addEventListener('click', () => {
                     const table = th.closest('table');
                     const tbody = table.querySelector('tbody');
                     if (!tbody) return;
-                    const rows = Array.from(tbody.querySelectorAll('tr'));
+                    const visibleRows = Array.from(tbody.querySelectorAll('tr'));
                     const index = Array.from(th.parentNode.children).indexOf(th);
                     const asc = th.dataset.asc === 'true';
                     th.dataset.asc = !asc;
                     
-                    rows.sort((rowA, rowB) => {
+                    visibleRows.sort((rowA, rowB) => {
                         const valA = rowA.children[index].textContent.trim();
                         const valB = rowB.children[index].textContent.trim();
                         
@@ -311,7 +460,7 @@ def generate_report():
                         return asc ? numA.toString().localeCompare(numB.toString()) : numB.toString().localeCompare(numA.toString());
                     });
                     
-                    rows.forEach(row => tbody.appendChild(row));
+                    visibleRows.forEach(row => tbody.appendChild(row));
                 });
             });
         });
@@ -321,7 +470,7 @@ def generate_report():
     """
 
     template = Template(html_template)
-    rendered_html = template.render(records=records)
+    rendered_html = template.render(records=records, sector_summary=sector_summary)
 
     with open(HTML_REPORT_PATH, 'w', encoding='utf-8') as f:
         f.write(rendered_html)

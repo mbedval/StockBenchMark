@@ -1,3 +1,5 @@
+watchlistpath: "/home/jmbx/Projects/BSA_advance/watchlist/watchlist_fundamental.txt"
+
 pipelines:
   - name: analyze_financials.py
     enabled: true
@@ -14,4 +16,8 @@ pipelines:
   - name: analyze_midcap150.py
     enabled: true
   - name: analyze_special_sectors.py
+    enabled: true
+  - name: analyze_new_sectors.py
+    enabled: true
+  - name: analyze_infra_industrial_tech.py
     enabled: true
