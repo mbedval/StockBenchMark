@@ -444,7 +444,7 @@ def generate_report():
                         const valB = rowB.children[index].textContent.trim();
                         
                         const cleanNum = (val) => {
-                            let clean = val.replace(/[₹%Cr,\s]/g, '').trim();
+                            let clean = val.replace(/[₹%Cr,\\s]/g, '').trim();
                             if (clean === 'N/A' || clean === '-') return -Infinity;
                             let n = parseFloat(clean);
                             return isNaN(n) ? val.toLowerCase() : n;

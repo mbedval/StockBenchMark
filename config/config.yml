@@ -1,4 +1,4 @@
-watchlistpath: "/home/jmbx/Projects/BSA_advance/watchlist/watchlist_fundamental.txt"
+watchlistpath: "..\\.\\BSA_advance\\watchlist\\watchlist_fundamental.txt"
 
 pipelines:
   - name: analyze_financials.py

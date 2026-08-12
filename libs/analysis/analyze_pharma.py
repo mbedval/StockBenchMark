@@ -532,8 +532,8 @@ def compile_html_report():
                     
                     if (isNumeric) {
                         // Strip currency, percentage signs, and Cr label
-                        xVal = parseFloat(xVal.replace(/[^\d.-]/g, '')) || 0;
-                        yVal = parseFloat(yVal.replace(/[^\d.-]/g, '')) || 0;
+                        xVal = parseFloat(xVal.replace(/[^\\d.-]/g, '')) || 0;
+                        yVal = parseFloat(yVal.replace(/[^\\d.-]/g, '')) || 0;
                     } else {
                         xVal = xVal.toLowerCase();
                         yVal = yVal.toLowerCase();
@@ -566,8 +566,8 @@ def compile_html_report():
                 let aVal = a.cells[colIndex].textContent.trim();
                 let bVal = b.cells[colIndex].textContent.trim();
                 if (isNumeric) {
-                    aVal = parseFloat(aVal.replace(/[^\d.-]/g, '')) || 0;
-                    bVal = parseFloat(bVal.replace(/[^\d.-]/g, '')) || 0;
+                    aVal = parseFloat(aVal.replace(/[^\\d.-]/g, '')) || 0;
+                    bVal = parseFloat(bVal.replace(/[^\\d.-]/g, '')) || 0;
                     return dir === "asc" ? aVal - bVal : bVal - aVal;
                 }
                 return dir === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);

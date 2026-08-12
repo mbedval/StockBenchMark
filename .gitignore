@@ -2,3 +2,18 @@
 data/cache/
 output/
 
+libs/analysis/__pycache__/analyze_cdmo.cpython-312.pyc
+.gitignore
+.gitignore
+libs/analysis/__pycache__/analyze_infra_industrial_tech.cpython-312.pyc
+libs/analysis/__pycache__/analyze_special_sectors.cpython-312.pyc
+libs/analysis/__pycache__/analyze_defence.cpython-312.pyc
+.gitignore
+libs/analysis/__pycache__/analyze_financials.cpython-312.pyc
+libs/analysis/__pycache__/analyze_midcap150.cpython-312.pyc
+libs/analysis/__pycache__/analyze_high_delivery.cpython-312.pyc
+libs/analysis/__pycache__/analyze_new_sectors.cpython-312.pyc
+libs/analysis/__pycache__/analyze_ems.cpython-312.pyc
+libs/analysis/__pycache__/analyze_smallcap250.cpython-312.pyc
+libs/analysis/__pycache__/analyze_pharma.cpython-312.pyc
+libs/utility/__pycache__/stock_utils.cpython-312.pyc
