@@ -97,7 +97,7 @@ def generate_synthetic_data(ticker, sector, s0=None, growth=0.15, volatility=0.3
     }
     return history, fundamentals
 
-def fetch_and_cache_ticker(cache_db_path, ticker, sector, today_str, spike_chance=0.30):
+def fetch_and_cache_ticker(cache_db_path, ticker, sector, today_str, spike_chance=0.30, force_download=False):
     """Fetch ticker details from yfinance and save/update inside SQLite cache database."""
     init_cache_db(cache_db_path)
     conn_cache = sqlite3.connect(cache_db_path)
@@ -106,7 +106,7 @@ def fetch_and_cache_ticker(cache_db_path, ticker, sector, today_str, spike_chanc
     try:
         cursor_cache.execute("SELECT last_updated FROM raw_fundamentals WHERE ticker = ?", (ticker,))
         row = cursor_cache.fetchone()
-        if row and row[0] == today_str:
+        if not force_download and row and row[0] == today_str:
             conn_cache.close()
             return f"{ticker}: Cache hit"
             

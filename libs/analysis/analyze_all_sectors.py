@@ -126,7 +126,7 @@ def fetch_all_data():
     print(f"Starting download process for {len(all_tickers_with_sectors)} tickers across {len(SECTORS_DEFINITION)} major sectors...")
     
     with ThreadPoolExecutor(max_workers=8) as executor:
-        futures = {executor.submit(stock_utils.fetch_and_cache_ticker, CACHE_DB_PATH, ticker, sector, today_str, spike_chance=0.30): ticker for ticker, sector in all_tickers_with_sectors}
+        futures = {executor.submit(stock_utils.fetch_and_cache_ticker, CACHE_DB_PATH, ticker, sector, today_str, spike_chance=0.30, force_download=True): ticker for ticker, sector in all_tickers_with_sectors}
         for i, future in enumerate(as_completed(futures)):
             res = future.result()
             if i % 15 == 0 or "Failed" in res:
@@ -283,6 +283,7 @@ def generate_sector_html(title, theme_color, score_df, delivery_records, output_
             background-image: 
                 radial-gradient(at 10% 10%, rgba(255, 255, 255, 0.02) 0px, transparent 50%),
                 radial-gradient(at 90% 90%, rgba(255, 255, 255, 0.02) 0px, transparent 50%);
+            overflow-x: hidden;
         }
         
         header {
@@ -375,19 +376,20 @@ def generate_sector_html(title, theme_color, score_df, delivery_records, output_
             color: var(--text-primary);
         }
 
-        /* Table Design */
         .table-container {
             background: var(--card-bg);
             border: 1px solid var(--border-color);
             border-radius: 12px;
-            overflow: hidden;
+            overflow-x: auto;
             box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
             backdrop-filter: blur(12px);
             margin-bottom: 3rem;
+            width: 100%;
         }
         
         table {
             width: 100%;
+            min-width: 1400px;
             border-collapse: collapse;
             text-align: left;
         }

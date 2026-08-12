@@ -53,6 +53,7 @@ def generate_report():
 
     records = combined_df.to_dict(orient='records') if not combined_df.empty else []
     
+    conn_cache = sqlite3.connect("data/cache/all_sectors_cache.db")
     for r in records:
         r['monthly_display'] = f"{r['monthly_avg']*100:.1f}%"
         r['weekly_display'] = f"{r['weekly_avg']*100:.1f}%"
@@ -60,6 +61,28 @@ def generate_report():
         r['prev_display'] = f"{r['prev_day_ratio']*100:.1f}%"
         r['prev_to_prev_display'] = f"{r['prev_to_prev_ratio']*100:.1f}%"
         r['dev_display'] = f"+{r['deviation']*100:.1f}%" if r['deviation'] >= 0 else f"{r['deviation']*100:.1f}%"
+
+        # Query volume history
+        ticker = r['ticker']
+        vol_df = pd.read_sql_query(
+            "SELECT date, volume FROM price_history WHERE ticker = ? ORDER BY date DESC LIMIT 3", 
+            conn_cache, params=(ticker,)
+        )
+        if len(vol_df) >= 3:
+            vol_today = vol_df.iloc[0]['volume']
+            vol_t1 = vol_df.iloc[1]['volume']
+            vol_t2 = vol_df.iloc[2]['volume']
+            
+            avg_last_2 = (vol_t1 + vol_t2) / 2
+            ratio = (vol_today / avg_last_2 * 100) if avg_last_2 > 0 else 0.0
+            
+            r['avg_vol_2d'] = f"{avg_last_2:,.0f}"
+            r['today_vol_pct'] = f"{ratio:.1f}%"
+        else:
+            r['avg_vol_2d'] = "N/A"
+            r['today_vol_pct'] = "N/A"
+            
+    conn_cache.close()
 
     sector_summary = []
     if not combined_df.empty:
@@ -81,7 +104,7 @@ def generate_report():
                 'border_weight': f"{border_weight:.2f}"
             })
 
-    html_template = """
+    html_template = r"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -116,6 +139,7 @@ def generate_report():
             background-image: 
                 radial-gradient(at 10% 10%, rgba(236, 72, 153, 0.05) 0px, transparent 50%),
                 radial-gradient(at 90% 90%, rgba(16, 185, 129, 0.05) 0px, transparent 50%);
+            overflow-x: hidden;
         }
         
         header {
@@ -142,15 +166,17 @@ def generate_report():
             background: var(--card-bg);
             border: 1px solid var(--border-color);
             border-radius: 12px;
-            overflow: hidden;
+            overflow-x: auto;
             box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
             backdrop-filter: blur(12px);
             margin: 2rem auto;
+            width: 100%;
             max-width: 1200px;
         }
         
         table {
             width: 100%;
+            min-width: 1400px;
             border-collapse: collapse;
             text-align: left;
         }
@@ -343,6 +369,8 @@ def generate_report():
                     <th>Previous Day</th>
                     <th>Latest Ratio</th>
                     <th>Deviation</th>
+                    <th>Avg Vol (2D)</th>
+                    <th>Today Vol %</th>
                     <th>Validation Insight</th>
                 </tr>
             </thead>
@@ -372,6 +400,8 @@ def generate_report():
                     <td style="font-weight: 700; color: #10b981;">
                         {{ d.dev_display }}
                     </td>
+                    <td>{{ d.avg_vol_2d }}</td>
+                    <td style="font-weight: 600; color: #3b82f6;">{{ d.today_vol_pct }}</td>
                     <td class="insight-col">{{ d.insight }}</td>
                 </tr>
                 {% endfor %}
