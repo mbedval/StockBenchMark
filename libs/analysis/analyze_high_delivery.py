@@ -7,30 +7,20 @@ SELECTED_DB_PATH = "output/db/SelectedStock.db"
 HTML_REPORT_PATH = "output/htmls/highDelivery.html"
 
 DELIVERY_TABLES = {
-    "delivery_to_trade": "Financial Services",
-    "defence_delivery": "Defence",
-    "ems_delivery": "EMS",
-    "cdmo_delivery": "CDMO",
-    "online_services_delivery": "Online Services",
-    "telecom_equip_delivery": "Telecom Equipments",
-    "datacenter_delivery": "Data Center",
-    "oil_gas_logistics_delivery": "Oil & Gas Storage and Transport",
-    "diversified_financials_delivery": "Diversified Financials",
-    "asset_management_delivery": "Asset Management",
-    "specialized_finance_delivery": "Specialized Finance",
-    "tech_hardware_delivery": "Technology Hardware",
-    "commodity_chemicals_delivery": "Commodity Chemicals",
-    "diversified_chemicals_delivery": "Diversified Chemicals",
-    "speciality_chemicals_delivery": "Speciality Chemicals",
-    "real_estate_delivery": "Real Estate",
-    "power_infrastructure_delivery": "Power Infrastructure",
-    "renewables_delivery": "Renewables",
-    "water_management_delivery": "Water Management",
-    "plastic_products_delivery": "Plastic Products",
-    "cements_delivery": "Cements",
-    "communication_networking_delivery": "Communication & Networking",
-    "electronic_equipments_delivery": "Electronic Equipments",
-    "software_services_delivery": "Software Services"
+    "financials_delivery": "Financial Services",
+    "technology_delivery": "Technology & Digital",
+    "healthcare_delivery": "Healthcare",
+    "chemicals_delivery": "Chemicals",
+    "industrials_delivery": "Industrials",
+    "defence_delivery": "Defence & Aerospace",
+    "infrastructure_delivery": "Infrastructure",
+    "power_delivery": "Power & Energy",
+    "oil_gas_delivery": "Oil & Gas",
+    "automobiles_delivery": "Automobiles",
+    "metals_mining_delivery": "Metals & Mining",
+    "construction_materials_delivery": "Construction Materials",
+    "consumer_delivery": "Consumer Goods",
+    "real_estate_delivery": "Real Estate"
 }
 
 def generate_report():
@@ -63,6 +53,7 @@ def generate_report():
 
     records = combined_df.to_dict(orient='records') if not combined_df.empty else []
     
+    conn_cache = sqlite3.connect("data/cache/all_sectors_cache.db")
     for r in records:
         r['monthly_display'] = f"{r['monthly_avg']*100:.1f}%"
         r['weekly_display'] = f"{r['weekly_avg']*100:.1f}%"
@@ -70,6 +61,28 @@ def generate_report():
         r['prev_display'] = f"{r['prev_day_ratio']*100:.1f}%"
         r['prev_to_prev_display'] = f"{r['prev_to_prev_ratio']*100:.1f}%"
         r['dev_display'] = f"+{r['deviation']*100:.1f}%" if r['deviation'] >= 0 else f"{r['deviation']*100:.1f}%"
+
+        # Query volume history
+        ticker = r['ticker']
+        vol_df = pd.read_sql_query(
+            "SELECT date, volume FROM price_history WHERE ticker = ? ORDER BY date DESC LIMIT 3", 
+            conn_cache, params=(ticker,)
+        )
+        if len(vol_df) >= 3:
+            vol_today = vol_df.iloc[0]['volume']
+            vol_t1 = vol_df.iloc[1]['volume']
+            vol_t2 = vol_df.iloc[2]['volume']
+            
+            avg_last_2 = (vol_t1 + vol_t2) / 2
+            ratio = (vol_today / avg_last_2 * 100) if avg_last_2 > 0 else 0.0
+            
+            r['avg_vol_2d'] = f"{avg_last_2:,.0f}"
+            r['today_vol_pct'] = f"{ratio:.1f}%"
+        else:
+            r['avg_vol_2d'] = "N/A"
+            r['today_vol_pct'] = "N/A"
+            
+    conn_cache.close()
 
     sector_summary = []
     if not combined_df.empty:
@@ -91,7 +104,7 @@ def generate_report():
                 'border_weight': f"{border_weight:.2f}"
             })
 
-    html_template = """
+    html_template = r"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -126,6 +139,7 @@ def generate_report():
             background-image: 
                 radial-gradient(at 10% 10%, rgba(236, 72, 153, 0.05) 0px, transparent 50%),
                 radial-gradient(at 90% 90%, rgba(16, 185, 129, 0.05) 0px, transparent 50%);
+            overflow-x: hidden;
         }
         
         header {
@@ -152,15 +166,17 @@ def generate_report():
             background: var(--card-bg);
             border: 1px solid var(--border-color);
             border-radius: 12px;
-            overflow: hidden;
+            overflow-x: auto;
             box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
             backdrop-filter: blur(12px);
             margin: 2rem auto;
+            width: 100%;
             max-width: 1200px;
         }
         
         table {
             width: 100%;
+            min-width: 1400px;
             border-collapse: collapse;
             text-align: left;
         }
@@ -353,6 +369,8 @@ def generate_report():
                     <th>Previous Day</th>
                     <th>Latest Ratio</th>
                     <th>Deviation</th>
+                    <th>Avg Vol (2D)</th>
+                    <th>Today Vol %</th>
                     <th>Validation Insight</th>
                 </tr>
             </thead>
@@ -382,6 +400,8 @@ def generate_report():
                     <td style="font-weight: 700; color: #10b981;">
                         {{ d.dev_display }}
                     </td>
+                    <td>{{ d.avg_vol_2d }}</td>
+                    <td style="font-weight: 600; color: #3b82f6;">{{ d.today_vol_pct }}</td>
                     <td class="insight-col">{{ d.insight }}</td>
                 </tr>
                 {% endfor %}

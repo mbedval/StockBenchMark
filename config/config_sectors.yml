@@ -1,0 +1,434 @@
+financials:
+  title: "Financial Services"
+  html_name: "Financials.html"
+  theme_color: "#2563eb"
+  constituents:
+    HDFCBANK.NS:
+      name: "HDFC Bank"
+      sub_sector: "Private Banks"
+    SBIN.NS:
+      name: "State Bank of India"
+      sub_sector: "PSU Banks"
+    MUTHOOTFIN.NS:
+      name: "Muthoot Finance"
+      sub_sector: "NBFC"
+    LICHSGFIN.NS:
+      name: "LIC Housing Finance"
+      sub_sector: "Housing Finance"
+    HDFCLIFE.NS:
+      name: "HDFC Life Insurance"
+      sub_sector: "Insurance"
+    HDFCAMC.NS:
+      name: "HDFC Asset Management"
+      sub_sector: "Asset Management"
+    ANGELONE.NS:
+      name: "Angel One"
+      sub_sector: "Stock Broking"
+    IEX.NS:
+      name: "Indian Energy Exchange"
+      sub_sector: "Exchanges"
+    TATAINVEST.NS:
+      name: "Tata Investment Corp"
+      sub_sector: "Investment Companies"
+    PAYTM.NS:
+      name: "Paytm"
+      sub_sector: "FinTech"
+    M&MFIN.NS:
+      name: "M&M Financial Services"
+      sub_sector: "Consumer Finance"
+    CREDITACC.NS:
+      name: "CreditAccess Grameen"
+      sub_sector: "Microfinance"
+
+technology:
+  title: "Technology & Digital"
+  html_name: "Technology.html"
+  theme_color: "#7c3aed"
+  constituents:
+    TCS.NS:
+      name: "TCS"
+      sub_sector: "IT Services"
+    INFY.NS:
+      name: "Infosys"
+      sub_sector: "IT Services"
+    KPITTECH.NS:
+      name: "KPIT Technologies"
+      sub_sector: "Software Products"
+    ROUTEMOBILE.NS:
+      name: "Route Mobile"
+      sub_sector: "SaaS"
+    COFORGE.NS:
+      name: "Coforge"
+      sub_sector: "IT Consulting"
+    NETWEB.NS:
+      name: "Netweb Technologies"
+      sub_sector: "Data Centres"
+    KAYNES.NS:
+      name: "Kaynes Technology"
+      sub_sector: "EMS"
+    DIXON.NS:
+      name: "Dixon Technologies"
+      sub_sector: "Electronics Manufacturing"
+    PGEL.NS:
+      name: "PG Electroplast"
+      sub_sector: "Electronic Components"
+    CGPOWER.NS:
+      name: "CG Power"
+      sub_sector: "Semiconductors"
+    ASMTEC.NS:
+      name: "ASM Technologies"
+      sub_sector: "Semiconductor Equipment"
+    ZOMATO.NS:
+      name: "Zomato"
+      sub_sector: "E-Commerce"
+    EASEMYTRIP.NS:
+      name: "EaseMyTrip"
+      sub_sector: "Digital Services"
+    TATACOMM.NS:
+      name: "Tata Communications"
+      sub_sector: "Telecom Services"
+    HFCL.NS:
+      name: "HFCL"
+      sub_sector: "Telecom Equipment"
+
+healthcare:
+  title: "Healthcare"
+  html_name: "Healthcare.html"
+  theme_color: "#059669"
+  constituents:
+    SUNPHARMA.NS:
+      name: "Sun Pharma"
+      sub_sector: "Pharmaceuticals"
+    DRREDDY.NS:
+      name: "Dr Reddy's"
+      sub_sector: "Pharmaceuticals"
+    GRANULES.NS:
+      name: "Granules India"
+      sub_sector: "API / Bulk Drugs"
+    CIPLA.NS:
+      name: "Cipla"
+      sub_sector: "Specialty Pharmaceuticals"
+    BIOCON.NS:
+      name: "Biocon"
+      sub_sector: "Biotechnology"
+    NH.NS:
+      name: "Narayana Hrudayalaya"
+      sub_sector: "Hospitals"
+    LALPATHLAB.NS:
+      name: "Dr Lal PathLabs"
+      sub_sector: "Diagnostics"
+    POLYMED.NS:
+      name: "Poly Medicure"
+      sub_sector: "Medical Devices"
+    SYNGENE.NS:
+      name: "Syngene International"
+      sub_sector: "Contract Research"
+    DIVISLAB.NS:
+      name: "Divi's Laboratories"
+      sub_sector: "CDMO"
+    APOLLOHOSP.NS:
+      name: "Apollo Hospitals"
+      sub_sector: "Healthcare Services"
+
+chemicals:
+  title: "Chemicals"
+  html_name: "Chemicals.html"
+  theme_color: "#be185d"
+  constituents:
+    FINEORG.NS:
+      name: "Fine Organic"
+      sub_sector: "Specialty Chemicals"
+    TATACHEM.NS:
+      name: "Tata Chemicals"
+      sub_sector: "Commodity Chemicals"
+    SRF.NS:
+      name: "SRF Ltd"
+      sub_sector: "Petrochemicals"
+    COROMANDEL.NS:
+      name: "Coromandel International"
+      sub_sector: "Fertilizers"
+    AARTIIND.NS:
+      name: "Aarti Industries"
+      sub_sector: "Performance Chemicals"
+    ATUL.NS:
+      name: "Atul Ltd"
+      sub_sector: "Performance Chemicals"
+    DEEPAKNTR.NS:
+      name: "Deepak Nitrite"
+      sub_sector: "Performance Chemicals"
+    GUJALKALI.NS:
+      name: "Gujarat Alkalies"
+      sub_sector: "Performance Chemicals"
+
+industrials:
+  title: "Industrials"
+  html_name: "Industrials.html"
+  theme_color: "#4b5563"
+  constituents:
+    L&T.NS:
+      name: "Larsen & Toubro"
+      sub_sector: "Capital Goods"
+    BHEL.NS:
+      name: "BHEL"
+      sub_sector: "Heavy Electrical Equipment"
+    SIEMENS.NS:
+      name: "Siemens"
+      sub_sector: "Industrial Automation"
+    ABB.NS:
+      name: "ABB India"
+      sub_sector: "Industrial Automation"
+    HONAUT.NS:
+      name: "Honeywell Automation"
+      sub_sector: "Industrial Automation"
+    ELGIEQUIP.NS:
+      name: "Elgi Equipments"
+      sub_sector: "Industrial Machinery"
+    TRIL.NS:
+      name: "Transformers & Rectifiers"
+      sub_sector: "Transformers"
+    VOLTAMP.NS:
+      name: "Voltamp Transformers"
+      sub_sector: "Transformers"
+    POLYCAB.NS:
+      name: "Polycab India"
+      sub_sector: "Cables & Wires"
+    KEI.NS:
+      name: "KEI Industries"
+      sub_sector: "Cables & Wires"
+    FINCABLES.NS:
+      name: "Finolex Cables"
+      sub_sector: "Cables & Wires"
+
+defence:
+  title: "Defence & Aerospace"
+  html_name: "Defence.html"
+  theme_color: "#0f766e"
+  constituents:
+    HAL.NS:
+      name: "Hindustan Aeronautics"
+      sub_sector: "Aerospace"
+    BEL.NS:
+      name: "Bharat Electronics"
+      sub_sector: "Defence Electronics"
+    BDL.NS:
+      name: "Bharat Dynamics"
+      sub_sector: "Missiles & Weapons Systems"
+    ZENTEC.NS:
+      name: "Zen Technologies"
+      sub_sector: "Defence Manufacturing"
+    IDEAFORGE.NS:
+      name: "ideaForge"
+      sub_sector: "Drones"
+    PARAS.NS:
+      name: "Paras Defence"
+      sub_sector: "Defence Components"
+
+infrastructure:
+  title: "Infrastructure"
+  html_name: "Infrastructure.html"
+  theme_color: "#f59e0b"
+  constituents:
+    RVNL.NS:
+      name: "Rail Vikas Nigam"
+      sub_sector: "Railways"
+    IRCON.NS:
+      name: "Ircon International"
+      sub_sector: "Railways"
+    KEC.NS:
+      name: "KEC International"
+      sub_sector: "EPC"
+    IRB.NS:
+      name: "IRB Infrastructure"
+      sub_sector: "Roads"
+    VATECHWABG.NS:
+      name: "VA Tech Wabag"
+      sub_sector: "Water Infrastructure"
+    EMS.NS:
+      name: "EMS Ltd"
+      sub_sector: "Waste Management"
+
+power:
+  title: "Power & Energy"
+  html_name: "Power.html"
+  theme_color: "#b45309"
+  constituents:
+    NTPC.NS:
+      name: "NTPC"
+      sub_sector: "Power Generation"
+    POWERGRID.NS:
+      name: "Power Grid Corp"
+      sub_sector: "Power Transmission"
+    TATAPOWER.NS:
+      name: "Tata Power"
+      sub_sector: "Power Distribution"
+    SUZLON.NS:
+      name: "Suzlon Energy"
+      sub_sector: "Wind Energy"
+    ADANIGREEN.NS:
+      name: "Adani Green"
+      sub_sector: "Solar"
+    IREDA.NS:
+      name: "IREDA"
+      sub_sector: "Renewable Energy"
+    AMARARAJA.NS:
+      name: "Amara Raja"
+      sub_sector: "Batteries"
+    EXIDEIND.NS:
+      name: "Exide Industries"
+      sub_sector: "Batteries"
+
+oil_gas:
+  title: "Oil & Gas"
+  html_name: "OilGas.html"
+  theme_color: "#f97316"
+  constituents:
+    ONGC.NS:
+      name: "ONGC"
+      sub_sector: "Oil Exploration"
+    OIL.NS:
+      name: "Oil India"
+      sub_sector: "Oil Production"
+    BPCL.NS:
+      name: "BPCL"
+      sub_sector: "Oil Refining"
+    IOC.NS:
+      name: "Indian Oil"
+      sub_sector: "Oil Marketing"
+    GAIL.NS:
+      name: "GAIL"
+      sub_sector: "Gas Transmission"
+    PETRONET.NS:
+      name: "Petronet LNG"
+      sub_sector: "LNG"
+    IGL.NS:
+      name: "Indraprastha Gas"
+      sub_sector: "City Gas Distribution"
+    MGL.NS:
+      name: "Mahanagar Gas"
+      sub_sector: "City Gas Distribution"
+
+automobiles:
+  title: "Automobiles"
+  html_name: "Automobiles.html"
+  theme_color: "#15803d"
+  constituents:
+    MARUTI.NS:
+      name: "Maruti Suzuki"
+      sub_sector: "Passenger Vehicles"
+    TATAMOTORS.NS:
+      name: "Tata Motors"
+      sub_sector: "Commercial Vehicles"
+    BAJAJ-AUTO.NS:
+      name: "Bajaj Auto"
+      sub_sector: "Two Wheelers"
+    MAHSEAMLES.NS:
+      name: "Mahindra & Mahindra"
+      sub_sector: "Passenger Vehicles"
+    SONACOMS.NS:
+      name: "Sona BLW"
+      sub_sector: "Auto Components"
+    UNOINDA.NS:
+      name: "Uno Minda"
+      sub_sector: "Auto Components"
+    MOTHERSON.NS:
+      name: "Samvardhana Motherson"
+      sub_sector: "Auto Components"
+    MRF.NS:
+      name: "MRF"
+      sub_sector: "Tyres"
+
+metals_mining:
+  title: "Metals & Mining"
+  html_name: "MetalsMining.html"
+  theme_color: "#475569"
+  constituents:
+    TATASTEEL.NS:
+      name: "Tata Steel"
+      sub_sector: "Iron & Steel"
+    JSL.NS:
+      name: "Jindal Stainless"
+      sub_sector: "Stainless Steel"
+    HINDALCO.NS:
+      name: "Hindalco"
+      sub_sector: "Aluminium"
+    HINDCOPPER.NS:
+      name: "Hindustan Copper"
+      sub_sector: "Copper"
+    HZL.NS:
+      name: "Hindustan Zinc"
+      sub_sector: "Zinc"
+    COALINDIA.NS:
+      name: "Coal India"
+      sub_sector: "Coal"
+    NMDC.NS:
+      name: "NMDC"
+      sub_sector: "Mining"
+
+construction_materials:
+  title: "Construction Materials"
+  html_name: "ConstructionMaterials.html"
+  theme_color: "#0f172a"
+  constituents:
+    ULTRACEMCO.NS:
+      name: "UltraTech Cement"
+      sub_sector: "Cement"
+    ACC.NS:
+      name: "ACC"
+      sub_sector: "Cement Products"
+    ASTRAL.NS:
+      name: "Astral"
+      sub_sector: "Pipes"
+    SUPREMEIND.NS:
+      name: "Supreme Industries"
+      sub_sector: "Building Materials"
+    CERA.NS:
+      name: "Cera Sanitaryware"
+      sub_sector: "Sanitaryware"
+    KAJARIACER.NS:
+      name: "Kajaria Ceramics"
+      sub_sector: "Tiles"
+
+consumer:
+  title: "Consumer Goods"
+  html_name: "Consumer.html"
+  theme_color: "#ec4899"
+  constituents:
+    ITC.NS:
+      name: "ITC"
+      sub_sector: "Tobacco"
+    HINDUNILVR.NS:
+      name: "Hindustan Unilever"
+      sub_sector: "Personal Care"
+    NESTLEIND.NS:
+      name: "Nestle India"
+      sub_sector: "Packaged Foods"
+    BRITANNIA.NS:
+      name: "Britannia"
+      sub_sector: "Packaged Foods"
+    TATACONSUM.NS:
+      name: "Tata Consumer"
+      sub_sector: "Food Products"
+    TITAN.NS:
+      name: "Titan Company"
+      sub_sector: "Jewellery"
+
+real_estate:
+  title: "Real Estate"
+  html_name: "RealEstate.html"
+  theme_color: "#a21caf"
+  constituents:
+    DLF.NS:
+      name: "DLF"
+      sub_sector: "Real Estate Development"
+    LODHA.NS:
+      name: "Macrotech Developers"
+      sub_sector: "Residential Real Estate"
+    GODREJPROP.NS:
+      name: "Godrej Properties"
+      sub_sector: "Residential Real Estate"
+    OBEROIRLTY.NS:
+      name: "Oberoi Realty"
+      sub_sector: "Residential Real Estate"
+    PHOENIXLTD.NS:
+      name: "Phoenix Mills"
+      sub_sector: "Commercial Real Estate"

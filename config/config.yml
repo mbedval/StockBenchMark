@@ -1,23 +1,5 @@
 watchlistpath: "..\\.\\BSA_advance\\watchlist\\watchlist_fundamental.txt"
 
 pipelines:
-  - name: analyze_financials.py
-    enabled: true
-  - name: analyze_defence.py
-    enabled: true
-  - name: analyze_ems.py
-    enabled: true
-  - name: analyze_cdmo.py
-    enabled: true
-  - name: analyze_pharma.py
-    enabled: true
-  - name: analyze_smallcap250.py
-    enabled: true
-  - name: analyze_midcap150.py
-    enabled: true
-  - name: analyze_special_sectors.py
-    enabled: true
-  - name: analyze_new_sectors.py
-    enabled: true
-  - name: analyze_infra_industrial_tech.py
+  - name: analyze_all_sectors.py
     enabled: true
