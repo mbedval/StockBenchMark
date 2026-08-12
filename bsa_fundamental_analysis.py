@@ -196,11 +196,235 @@ def main():
     print("=" * 80)
     generate_watchlist(watchlist_path)
     print("=" * 80)
+
+    # Generate Index Hub HTML
+    generate_index_html()
+    print("=" * 80)
     
     if res_hd.returncode == 0:
         print("Pipeline orchestration completed successfully.")
     else:
         print(f"Pipeline finished, but consolidation report failed with code {res_hd.returncode}.")
+
+def generate_index_html():
+    """Generates a central directory index.html hub connecting all reports."""
+    import glob
+    from jinja2 import Template
+    
+    htmls_dir = "output/htmls"
+    index_path = os.path.join(htmls_dir, "index.html")
+    
+    print("Generating directory index HTML hub...")
+    
+    # Find all html files in output/htmls/
+    html_files = glob.glob(os.path.join(htmls_dir, "*.html"))
+    
+    sectors = []
+    high_delivery = None
+    
+    for fpath in html_files:
+        basename = os.path.basename(fpath)
+        if basename == "index.html":
+            continue
+        elif basename == "highDelivery.html":
+            high_delivery = {
+                "name": "High Delivery Spikes",
+                "filename": basename,
+                "description": "Consolidated dashboard of stocks with spikes in delivery-to-trade volume ratio (>= 1.5x deviation)."
+            }
+        else:
+            name_no_ext = os.path.splitext(basename)[0]
+            # Split CamelCase to spaced titles
+            spaced_name = re.sub(r'(?<!^)(?=[A-Z])', ' ', name_no_ext)
+            sectors.append({
+                "name": spaced_name,
+                "filename": basename
+            })
+            
+    sectors.sort(key=lambda x: x["name"])
+
+    html_template = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Benchmark Analytics Hub</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: rgba(22, 28, 45, 0.7);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --primary-accent: #3b82f6;
+            --secondary-accent: #ec4899;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 3rem 2rem;
+            background-image: 
+                radial-gradient(at 10% 10%, rgba(59, 130, 246, 0.05) 0px, transparent 50%),
+                radial-gradient(at 90% 90%, rgba(236, 72, 153, 0.05) 0px, transparent 50%);
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+        
+        h1 {
+            font-size: 2.8rem;
+            font-weight: 700;
+            background: linear-gradient(to right, #3b82f6, #ec4899);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+        
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1.2rem;
+        }
+        
+        .section-container {
+            max-width: 1100px;
+            margin: 0 auto 4rem auto;
+        }
+        
+        .section-title {
+            font-size: 1.6rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            border-left: 4px solid var(--primary-accent);
+            padding-left: 0.75rem;
+            color: var(--text-primary);
+        }
+        
+        .grid-layout {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+        
+        .hub-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-decoration: none;
+            color: inherit;
+            transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 100%;
+        }
+        
+        .hub-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--primary-accent);
+            box-shadow: 0 8px 24px rgba(59, 130, 246, 0.2);
+        }
+        
+        .delivery-card:hover {
+            border-color: var(--secondary-accent);
+            box-shadow: 0 8px 24px rgba(236, 72, 153, 0.2);
+        }
+        
+        .card-name {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+        }
+        
+        .card-desc {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+        
+        .card-link-text {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--primary-accent);
+            margin-top: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        
+        .delivery-card .card-link-text {
+            color: var(--secondary-accent);
+        }
+        
+        .card-link-text::after {
+            content: '→';
+            transition: transform 0.2s ease;
+        }
+        
+        .hub-card:hover .card-link-text::after {
+            transform: translateX(4px);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Stock Benchmark Hub</h1>
+        <p class="subtitle">Comprehensive Sectoral Fundamentals & Volumetric Spike Reports</p>
+    </header>
+
+    {% if high_delivery %}
+    <div class="section-container">
+        <h2 class="section-title" style="border-left-color: var(--secondary-accent);">Consolidated Volumetric Analytics</h2>
+        <div style="max-width: 500px;">
+            <a href="{{ high_delivery.filename }}" class="hub-card delivery-card">
+                <div>
+                    <div class="card-name">{{ high_delivery.name }}</div>
+                    <div class="card-desc">{{ high_delivery.description }}</div>
+                </div>
+                <div class="card-link-text">Open Spikes Dashboard</div>
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="section-container">
+        <h2 class="section-title">Sectoral Fundamental Analysis</h2>
+        <div class="grid-layout">
+            {% for s in sectors %}
+            <a href="{{ s.filename }}" class="hub-card">
+                <div>
+                    <div class="card-name">{{ s.name }}</div>
+                    <div class="card-desc">Detailed EOD fundamental scores, growth parameters, and valuation metric comparisons.</div>
+                </div>
+                <div class="card-link-text">Open Sector Report</div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+</body>
+</html>"""
+
+    t = Template(html_template)
+    rendered = t.render(sectors=sectors, high_delivery=high_delivery)
+    
+    with open(index_path, "w", encoding="utf-8") as f:
+        f.write(rendered)
+    print(f"Directory index successfully compiled at {index_path}")
 
 if __name__ == "__main__":
     main()

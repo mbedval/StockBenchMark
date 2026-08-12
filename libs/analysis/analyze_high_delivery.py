@@ -7,30 +7,20 @@ SELECTED_DB_PATH = "output/db/SelectedStock.db"
 HTML_REPORT_PATH = "output/htmls/highDelivery.html"
 
 DELIVERY_TABLES = {
-    "delivery_to_trade": "Financial Services",
-    "defence_delivery": "Defence",
-    "ems_delivery": "EMS",
-    "cdmo_delivery": "CDMO",
-    "online_services_delivery": "Online Services",
-    "telecom_equip_delivery": "Telecom Equipments",
-    "datacenter_delivery": "Data Center",
-    "oil_gas_logistics_delivery": "Oil & Gas Storage and Transport",
-    "diversified_financials_delivery": "Diversified Financials",
-    "asset_management_delivery": "Asset Management",
-    "specialized_finance_delivery": "Specialized Finance",
-    "tech_hardware_delivery": "Technology Hardware",
-    "commodity_chemicals_delivery": "Commodity Chemicals",
-    "diversified_chemicals_delivery": "Diversified Chemicals",
-    "speciality_chemicals_delivery": "Speciality Chemicals",
-    "real_estate_delivery": "Real Estate",
-    "power_infrastructure_delivery": "Power Infrastructure",
-    "renewables_delivery": "Renewables",
-    "water_management_delivery": "Water Management",
-    "plastic_products_delivery": "Plastic Products",
-    "cements_delivery": "Cements",
-    "communication_networking_delivery": "Communication & Networking",
-    "electronic_equipments_delivery": "Electronic Equipments",
-    "software_services_delivery": "Software Services"
+    "financials_delivery": "Financial Services",
+    "technology_delivery": "Technology & Digital",
+    "healthcare_delivery": "Healthcare",
+    "chemicals_delivery": "Chemicals",
+    "industrials_delivery": "Industrials",
+    "defence_delivery": "Defence & Aerospace",
+    "infrastructure_delivery": "Infrastructure",
+    "power_delivery": "Power & Energy",
+    "oil_gas_delivery": "Oil & Gas",
+    "automobiles_delivery": "Automobiles",
+    "metals_mining_delivery": "Metals & Mining",
+    "construction_materials_delivery": "Construction Materials",
+    "consumer_delivery": "Consumer Goods",
+    "real_estate_delivery": "Real Estate"
 }
 
 def generate_report():
